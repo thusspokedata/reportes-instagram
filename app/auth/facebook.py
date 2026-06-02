@@ -14,11 +14,13 @@ from urllib.parse import urlencode
 import requests
 from flask import current_app
 
-# Permissions needed to read Instagram Business insights. Request only these.
+# Permissions approved for this app in Meta (Instagram Graph API via Facebook
+# Login for Business). Request EXACTLY these — no messaging/publishing/ads.
 SCOPES = [
     "instagram_basic",
     "instagram_manage_insights",
     "pages_show_list",
+    "pages_read_engagement",
     "business_management",
 ]
 

@@ -1,3 +1,5 @@
+from urllib.parse import parse_qs, urlparse
+
 import pytest
 import requests
 
@@ -33,6 +35,36 @@ def test_build_login_url_uses_version_and_scopes(app_ctx):
     assert "instagram_manage_insights" in url
     assert "response_type=code" in url
     assert "state=st" in url
+
+
+def test_login_url_requests_exact_meta_scopes(app_ctx):
+    """The authorization URL must request exactly the 5 approved scopes."""
+    url = facebook.build_login_url("st")
+    query = parse_qs(urlparse(url).query)
+    requested = query["scope"][0].split(",")
+
+    # Length check catches accidental duplicate scopes that a set would hide.
+    assert len(requested) == 5
+    assert set(requested) == {
+        "instagram_basic",
+        "instagram_manage_insights",
+        "pages_show_list",
+        "pages_read_engagement",
+        "business_management",
+    }
+
+
+def test_login_url_excludes_messaging_publishing_ads_scopes(app_ctx):
+    url = facebook.build_login_url("st")
+    query = parse_qs(urlparse(url).query)
+    requested = set(query["scope"][0].split(","))
+
+    for forbidden in (
+        "instagram_manage_messages",
+        "instagram_content_publishing",
+        "ads_management",
+    ):
+        assert forbidden not in requested
 
 
 def test_get_user_profile_parses_id_and_name(app_ctx, monkeypatch):
