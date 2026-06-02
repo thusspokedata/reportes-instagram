@@ -64,6 +64,8 @@ def test_session_cookie_secure_defaults_to_true(monkeypatch):
         ("0", False),
         ("no", False),
         ("off", False),
+        # Explicitly set but empty differs from unset (which defaults True).
+        ("", False),
         ("True", True),
         ("1", True),
         # Unrecognized values stay secure (fail-safe).
