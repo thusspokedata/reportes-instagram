@@ -41,9 +41,11 @@ def test_login_url_requests_exact_meta_scopes(app_ctx):
     """The authorization URL must request exactly the 5 approved scopes."""
     url = facebook.build_login_url("st")
     query = parse_qs(urlparse(url).query)
-    requested = set(query["scope"][0].split(","))
+    requested = query["scope"][0].split(",")
 
-    assert requested == {
+    # Length check catches accidental duplicate scopes that a set would hide.
+    assert len(requested) == 5
+    assert set(requested) == {
         "instagram_basic",
         "instagram_manage_insights",
         "pages_show_list",
