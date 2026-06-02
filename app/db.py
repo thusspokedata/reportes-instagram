@@ -1,10 +1,9 @@
-"""SQLite connection handling and the ``init-db`` CLI command.
+"""SQLite connection handling, schema init, and the ``init-db`` CLI command.
 
 The connection is cached on Flask's application context (``g``) so a single
 request reuses one connection, and it is closed automatically on teardown.
 
-No tables are defined yet: ``init_db`` only ensures the database file exists.
-The data model is defined in a later spec by the architecture agent.
+``init_db`` creates the database file and applies ``schema.sql``.
 """
 
 import os
@@ -40,10 +39,9 @@ def close_db(e=None):
 
 
 def init_db():
-    """Create the database file.
+    """Create the database file and apply ``schema.sql``.
 
-    The parent directory (e.g. ``instance/``) is created if missing. No schema
-    is applied yet; opening the connection is enough to create the file.
+    The parent directory (e.g. ``instance/``) is created if missing.
     """
     db_path = current_app.config["DATABASE"]
     parent = os.path.dirname(db_path)
@@ -51,7 +49,36 @@ def init_db():
         os.makedirs(parent, exist_ok=True)
 
     db = get_db()
+    with current_app.open_resource("schema.sql") as f:
+        db.executescript(f.read().decode("utf8"))
     db.commit()
+
+
+def upsert_user(fb_user_id, nombre, access_token_cifrado, token_expira_en):
+    """Insert or update a user's profile and (encrypted) token.
+
+    ``access_token_cifrado`` MUST already be encrypted by the caller; this
+    function never sees a plaintext token.
+    """
+    db = get_db()
+    db.execute(
+        """
+        INSERT INTO usuarias (fb_user_id, nombre, access_token_cifrado,
+                              token_expira_en, actualizado_en)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(fb_user_id) DO UPDATE SET
+            nombre = excluded.nombre,
+            access_token_cifrado = excluded.access_token_cifrado,
+            token_expira_en = excluded.token_expira_en,
+            actualizado_en = CURRENT_TIMESTAMP
+        """,
+        (fb_user_id, nombre, access_token_cifrado, token_expira_en),
+    )
+    db.commit()
+    row = db.execute(
+        "SELECT id FROM usuarias WHERE fb_user_id = ?", (fb_user_id,)
+    ).fetchone()
+    return row["id"]
 
 
 @click.command("init-db")

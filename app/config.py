@@ -32,3 +32,21 @@ class Config:
         # instance_path (see create_app). A relative default would be resolved
         # against the process CWD, which is brittle under gunicorn/systemd.
         self.DATABASE = os.environ.get("DATABASE")
+
+        # Key used to encrypt access tokens at rest (Fernet). Required: the
+        # factory refuses to start without it (see create_app).
+        self.TOKEN_ENCRYPTION_KEY = os.environ.get("TOKEN_ENCRYPTION_KEY")
+
+        # Session cookie hardening.
+        self.SESSION_COOKIE_HTTPONLY = True
+        self.SESSION_COOKIE_SAMESITE = "Lax"
+        # Secure cookies require HTTPS, which breaks local http development.
+        # Default True (production); set SESSION_COOKIE_SECURE=False locally.
+        self.SESSION_COOKIE_SECURE = (
+            os.environ.get("SESSION_COOKIE_SECURE", "True").lower() != "false"
+        )
+
+        # Meta OAuth / Graph API hosts. The API *version* is never hardcoded;
+        # it always comes from GRAPH_API_VERSION above.
+        self.FACEBOOK_OAUTH_DIALOG_BASE = "https://www.facebook.com"
+        self.GRAPH_API_BASE = "https://graph.facebook.com"

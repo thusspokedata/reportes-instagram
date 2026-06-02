@@ -1,3 +1,5 @@
 Flask
 gunicorn
 python-dotenv
+cryptography
+requests

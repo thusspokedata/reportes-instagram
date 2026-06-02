@@ -9,6 +9,7 @@ import os
 from flask import Flask
 
 from . import db
+from .auth.routes import bp as auth_bp
 from .config import Config
 from .routes.main import bp as main_bp
 
@@ -24,6 +25,14 @@ def create_app():
             "before starting the app; there is no insecure default."
         )
 
+    if not app.config.get("TOKEN_ENCRYPTION_KEY"):
+        raise RuntimeError(
+            "TOKEN_ENCRYPTION_KEY is not set. Generate one with "
+            '`python -c "from cryptography.fernet import Fernet; '
+            'print(Fernet.generate_key().decode())"` and set it in the '
+            "environment (or .env); there is no insecure default."
+        )
+
     # When DATABASE is not set in the environment, default to an absolute path
     # under instance_path so the resolved DB is stable regardless of the
     # process working directory (e.g. gunicorn under systemd).
@@ -33,7 +42,8 @@ def create_app():
     # DB teardown + `flask init-db` command.
     db.init_app(app)
 
-    # Blueprints. Add `auth` and `dashboard` here in later specs.
+    # Blueprints. Add `dashboard` here in a later spec.
     app.register_blueprint(main_bp)
+    app.register_blueprint(auth_bp)
 
     return app

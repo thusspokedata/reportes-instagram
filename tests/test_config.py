@@ -9,7 +9,7 @@ def test_app_starts_with_valid_config(env):
     app = create_app()
 
     assert app.config["SECRET_KEY"] == "test-secret"
-    assert app.config["GRAPH_API_VERSION"] == "v22.0"
+    assert app.config["GRAPH_API_VERSION"] == "v23.0"
     assert app.config["REDIRECT_URI"] == "http://localhost:5000/auth/callback"
 
 
@@ -20,8 +20,35 @@ def test_missing_secret_key_fails_loudly(env, monkeypatch):
         create_app()
 
 
+def test_missing_token_encryption_key_fails_loudly(env, monkeypatch):
+    monkeypatch.delenv("TOKEN_ENCRYPTION_KEY", raising=False)
+
+    with pytest.raises(RuntimeError, match="TOKEN_ENCRYPTION_KEY"):
+        create_app()
+
+
+def test_session_cookie_hardening(env):
+    app = create_app()
+
+    assert app.config["SESSION_COOKIE_HTTPONLY"] is True
+    assert app.config["SESSION_COOKIE_SAMESITE"] == "Lax"
+    # Fixture sets SESSION_COOKIE_SECURE=False (local over http).
+    assert app.config["SESSION_COOKIE_SECURE"] is False
+
+
+def test_session_cookie_secure_defaults_to_true(monkeypatch):
+    monkeypatch.setenv("SECRET_KEY", "test-secret")
+    monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", "x")
+    monkeypatch.delenv("SESSION_COOKIE_SECURE", raising=False)
+
+    app = create_app()
+
+    assert app.config["SESSION_COOKIE_SECURE"] is True
+
+
 def test_database_defaults_to_absolute_instance_path(monkeypatch):
     monkeypatch.setenv("SECRET_KEY", "test-secret")
+    monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", "x")
     monkeypatch.delenv("DATABASE", raising=False)
 
     app = create_app()
