@@ -26,6 +26,10 @@ def get_db():
             detect_types=sqlite3.PARSE_DECLTYPES,
         )
         g.db.row_factory = sqlite3.Row
+        # SQLite does not enforce foreign keys unless asked, per connection.
+        # Enable it now so future snapshot tables get real referential
+        # integrity instead of silently-ignored constraints.
+        g.db.execute("PRAGMA foreign_keys = ON")
 
     return g.db
 

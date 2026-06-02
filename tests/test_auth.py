@@ -140,9 +140,11 @@ def test_callback_handles_meta_error_param(client):
     )
 
     # Should not crash; should not be a successful login.
-    assert response.status_code in (200, 302, 400, 403)
+    assert response.status_code == 400
     with client.session_transaction() as sess:
         assert not sess.get("logged_in")
+        # state must be consumed even on the error path (single-use).
+        assert not sess.get("oauth_state")
 
 
 # --- /auth/logout --------------------------------------------------------
@@ -154,7 +156,33 @@ def test_logout_clears_session(client):
 
     response = client.get("/auth/logout")
 
-    assert response.status_code in (302, 200)
+    assert response.status_code == 302
     with client.session_transaction() as sess:
         assert not sess.get("logged_in")
         assert not sess.get("user_id")
+
+
+def test_callback_tolerates_non_numeric_expires_in(client, app, monkeypatch):
+    monkeypatch.setattr(facebook, "exchange_code_for_token", lambda code: "short")
+    monkeypatch.setattr(
+        facebook,
+        "exchange_for_long_lived_token",
+        lambda short: ("long-token-xyz", "not-a-number"),
+    )
+    monkeypatch.setattr(
+        facebook, "get_user_profile", lambda token: {"id": "u1", "name": "N"}
+    )
+    with client.session_transaction() as sess:
+        sess["oauth_state"] = "good-state"
+
+    response = client.get("/auth/callback?code=c&state=good-state")
+
+    # Must not 500; the token is stored with no expiry rather than crashing.
+    assert response.status_code == 302
+    with app.app_context():
+        from app.db import get_db
+
+        row = get_db().execute(
+            "SELECT token_expira_en FROM usuarias WHERE fb_user_id = 'u1'"
+        ).fetchone()
+    assert row["token_expira_en"] is None

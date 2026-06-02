@@ -40,6 +40,10 @@ def login():
 @bp.route("/callback")
 def callback():
     """Handle Meta's redirect back to the app."""
+    # Consume the issued state first, so it is single-use on every path
+    # (including the error path below), preventing replay.
+    expected_state = session.pop("oauth_state", None)
+
     # The user cancelled or Meta returned an error. Don't leak details.
     if request.args.get("error"):
         return (
@@ -49,7 +53,6 @@ def callback():
         )
 
     # Anti-CSRF: state must be present and match the one we issued.
-    expected_state = session.pop("oauth_state", None)
     received_state = request.args.get("state")
     if (
         not expected_state
@@ -73,8 +76,15 @@ def callback():
         return (str(exc), 400)
 
     expira_en = None
-    if expires_in:
-        expira_en = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
+    try:
+        if expires_in:
+            expira_en = datetime.now(timezone.utc) + timedelta(
+                seconds=int(expires_in)
+            )
+    except (TypeError, ValueError):
+        # Meta returned an unexpected expires_in; store with no expiry rather
+        # than crashing the login.
+        expira_en = None
 
     user_id = upsert_user(
         fb_user_id=profile["id"],

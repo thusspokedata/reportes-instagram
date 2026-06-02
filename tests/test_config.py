@@ -1,8 +1,11 @@
 import os
 
 import pytest
+from cryptography.fernet import Fernet
 
 from app import create_app
+
+VALID_KEY = Fernet.generate_key().decode()
 
 
 def test_app_starts_with_valid_config(env):
@@ -27,6 +30,13 @@ def test_missing_token_encryption_key_fails_loudly(env, monkeypatch):
         create_app()
 
 
+def test_malformed_token_encryption_key_fails_at_boot(env, monkeypatch):
+    monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", "not-a-valid-fernet-key")
+
+    with pytest.raises(RuntimeError, match="TOKEN_ENCRYPTION_KEY"):
+        create_app()
+
+
 def test_session_cookie_hardening(env):
     app = create_app()
 
@@ -38,7 +48,7 @@ def test_session_cookie_hardening(env):
 
 def test_session_cookie_secure_defaults_to_true(monkeypatch):
     monkeypatch.setenv("SECRET_KEY", "test-secret")
-    monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", "x")
+    monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", VALID_KEY)
     monkeypatch.delenv("SESSION_COOKIE_SECURE", raising=False)
 
     app = create_app()
@@ -48,7 +58,7 @@ def test_session_cookie_secure_defaults_to_true(monkeypatch):
 
 def test_database_defaults_to_absolute_instance_path(monkeypatch):
     monkeypatch.setenv("SECRET_KEY", "test-secret")
-    monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", "x")
+    monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", VALID_KEY)
     monkeypatch.delenv("DATABASE", raising=False)
 
     app = create_app()
