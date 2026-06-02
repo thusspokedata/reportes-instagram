@@ -1,0 +1,18 @@
+# Environment / secrets
+.env
+
+# Databases
+*.db
+instance/*.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environments
+venv/
+.venv/
+
+# Test / tooling caches
+.pytest_cache/
