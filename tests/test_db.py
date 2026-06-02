@@ -22,6 +22,14 @@ def test_get_db_returns_row_factory_connection(env):
         assert db.row_factory is sqlite3.Row
 
 
+def test_get_db_enables_foreign_keys(env):
+    app = create_app()
+
+    with app.app_context():
+        db = get_db()
+        assert db.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+
+
 def test_init_db_cli_command(env):
     app = create_app()
 

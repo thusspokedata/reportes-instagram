@@ -4,10 +4,21 @@ Pequeña web app privada para ver métricas de Instagram Business.
 
 **Stack:** Python + Flask (gunicorn + nginx en deploy), SQLite, HTML
 server-side, Chart.js. OAuth vía Facebook Login y datos vía Instagram Graph
-API v22.0.
+API (versión configurable, ver `GRAPH_API_VERSION`).
 
-> Estado: esqueleto inicial (SPEC 01). El login OAuth y la bajada de datos
-> llegan en specs posteriores.
+> Estado: scaffolding (SPEC 01) + login OAuth con Facebook (SPEC 02). La
+> bajada de datos / métricas llega en specs posteriores.
+
+## Login (OAuth)
+
+Rutas del blueprint `auth`:
+
+- `GET /auth/login` — inicia el flujo OAuth (redirige a Facebook).
+- `GET /auth/callback` — recibe el callback, valida `state`, canjea el token
+  y lo guarda cifrado.
+- `GET /auth/logout` — cierra la sesión.
+
+Los access tokens se guardan **cifrados** en SQLite (Fernet), nunca en claro.
 
 ## Requisitos
 
@@ -49,14 +60,24 @@ Ninguna credencial se versiona ni se loguea.
 
 | Variable              | Descripción                                         |
 | --------------------- | --------------------------------------------------- |
-| `SECRET_KEY`          | Clave de sesiones de Flask. **Obligatoria.**        |
-| `FACEBOOK_APP_ID`     | App ID de la app de Meta.                            |
-| `FACEBOOK_APP_SECRET` | App Secret de la app de Meta.                        |
-| `REDIRECT_URI`        | Redirect OAuth. Debe coincidir con el registrado.   |
-| `GRAPH_API_VERSION`   | Versión de la Graph API (ej. `v22.0`).              |
-| `DATABASE`            | Ruta a la SQLite (default `instance/reportes.db`).  |
+| `SECRET_KEY`            | Clave de sesiones de Flask. **Obligatoria.**          |
+| `TOKEN_ENCRYPTION_KEY`  | Clave Fernet para cifrar tokens. **Obligatoria.**     |
+| `FACEBOOK_APP_ID`       | App ID de la app de Meta.                             |
+| `FACEBOOK_APP_SECRET`   | App Secret de la app de Meta.                         |
+| `REDIRECT_URI`          | Redirect OAuth. Debe coincidir con el registrado.    |
+| `GRAPH_API_VERSION`     | Versión de la Graph API (ej. `v23.0`).               |
+| `DATABASE`              | Ruta a la SQLite (default `instance/reportes.db`).   |
+| `SESSION_COOKIE_SECURE` | Cookies sólo por HTTPS. `False` en local, `True` prod.|
+| `FLASK_DEBUG`           | `1` activa el debugger local (default off).           |
 
-Si falta `SECRET_KEY`, la app **no arranca** y falla con un error explícito.
+Si falta `SECRET_KEY` o `TOKEN_ENCRYPTION_KEY` (o esta última es inválida), la
+app **no arranca** y falla con un error explícito.
+
+Generá `TOKEN_ENCRYPTION_KEY` con:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
 
 ## Deploy (gunicorn)
 

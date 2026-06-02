@@ -6,9 +6,11 @@ blueprints (and a snapshots cron) without rewriting startup.
 
 import os
 
+from cryptography.fernet import Fernet
 from flask import Flask
 
 from . import db
+from .auth.routes import bp as auth_bp
 from .config import Config
 from .routes.main import bp as main_bp
 
@@ -24,6 +26,25 @@ def create_app():
             "before starting the app; there is no insecure default."
         )
 
+    token_key = app.config.get("TOKEN_ENCRYPTION_KEY")
+    if not token_key:
+        raise RuntimeError(
+            "TOKEN_ENCRYPTION_KEY is not set. Generate one with "
+            '`python -c "from cryptography.fernet import Fernet; '
+            'print(Fernet.generate_key().decode())"` and set it in the '
+            "environment (or .env); there is no insecure default."
+        )
+    try:
+        # Validate the key format at boot so a malformed key fails loudly here
+        # instead of at the first token encryption in production.
+        Fernet(token_key.encode() if isinstance(token_key, str) else token_key)
+    except (ValueError, TypeError) as exc:
+        raise RuntimeError(
+            "TOKEN_ENCRYPTION_KEY is not a valid Fernet key. Generate one with "
+            '`python -c "from cryptography.fernet import Fernet; '
+            'print(Fernet.generate_key().decode())"`.'
+        ) from exc
+
     # When DATABASE is not set in the environment, default to an absolute path
     # under instance_path so the resolved DB is stable regardless of the
     # process working directory (e.g. gunicorn under systemd).
@@ -33,7 +54,8 @@ def create_app():
     # DB teardown + `flask init-db` command.
     db.init_app(app)
 
-    # Blueprints. Add `auth` and `dashboard` here in later specs.
+    # Blueprints. Add `dashboard` here in a later spec.
     app.register_blueprint(main_bp)
+    app.register_blueprint(auth_bp)
 
     return app

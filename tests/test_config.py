@@ -1,15 +1,18 @@
 import os
 
 import pytest
+from cryptography.fernet import Fernet
 
 from app import create_app
+
+VALID_KEY = Fernet.generate_key().decode()
 
 
 def test_app_starts_with_valid_config(env):
     app = create_app()
 
     assert app.config["SECRET_KEY"] == "test-secret"
-    assert app.config["GRAPH_API_VERSION"] == "v22.0"
+    assert app.config["GRAPH_API_VERSION"] == "v23.0"
     assert app.config["REDIRECT_URI"] == "http://localhost:5000/auth/callback"
 
 
@@ -20,8 +23,68 @@ def test_missing_secret_key_fails_loudly(env, monkeypatch):
         create_app()
 
 
+def test_missing_token_encryption_key_fails_loudly(env, monkeypatch):
+    monkeypatch.delenv("TOKEN_ENCRYPTION_KEY", raising=False)
+
+    with pytest.raises(RuntimeError, match="TOKEN_ENCRYPTION_KEY"):
+        create_app()
+
+
+def test_malformed_token_encryption_key_fails_at_boot(env, monkeypatch):
+    monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", "not-a-valid-fernet-key")
+
+    with pytest.raises(RuntimeError, match="TOKEN_ENCRYPTION_KEY"):
+        create_app()
+
+
+def test_session_cookie_hardening(env):
+    app = create_app()
+
+    assert app.config["SESSION_COOKIE_HTTPONLY"] is True
+    assert app.config["SESSION_COOKIE_SAMESITE"] == "Lax"
+    # Fixture sets SESSION_COOKIE_SECURE=False (local over http).
+    assert app.config["SESSION_COOKIE_SECURE"] is False
+
+
+def test_session_cookie_secure_defaults_to_true(monkeypatch):
+    monkeypatch.setenv("SECRET_KEY", "test-secret")
+    monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", VALID_KEY)
+    monkeypatch.delenv("SESSION_COOKIE_SECURE", raising=False)
+
+    app = create_app()
+
+    assert app.config["SESSION_COOKIE_SECURE"] is True
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        ("False", False),
+        ("false", False),
+        ("0", False),
+        ("no", False),
+        ("off", False),
+        # Explicitly set but empty differs from unset (which defaults True).
+        ("", False),
+        ("True", True),
+        ("1", True),
+        # Unrecognized values stay secure (fail-safe).
+        ("weird", True),
+    ],
+)
+def test_session_cookie_secure_parsing(monkeypatch, value, expected):
+    monkeypatch.setenv("SECRET_KEY", "test-secret")
+    monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", VALID_KEY)
+    monkeypatch.setenv("SESSION_COOKIE_SECURE", value)
+
+    app = create_app()
+
+    assert app.config["SESSION_COOKIE_SECURE"] is expected
+
+
 def test_database_defaults_to_absolute_instance_path(monkeypatch):
     monkeypatch.setenv("SECRET_KEY", "test-secret")
+    monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", VALID_KEY)
     monkeypatch.delenv("DATABASE", raising=False)
 
     app = create_app()
