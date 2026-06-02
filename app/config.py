@@ -41,10 +41,10 @@ class Config:
         self.SESSION_COOKIE_HTTPONLY = True
         self.SESSION_COOKIE_SAMESITE = "Lax"
         # Secure cookies require HTTPS, which breaks local http development.
-        # Default True (production); set SESSION_COOKIE_SECURE=False locally.
-        self.SESSION_COOKIE_SECURE = (
-            os.environ.get("SESSION_COOKIE_SECURE", "True").lower() != "false"
-        )
+        # Default True (production); disable explicitly with a known falsy
+        # value. Unrecognized values stay secure (fail-safe).
+        _secure = os.environ.get("SESSION_COOKIE_SECURE", "true").strip().lower()
+        self.SESSION_COOKIE_SECURE = _secure not in {"false", "0", "no", "off", ""}
 
         # Meta OAuth / Graph API hosts. The API *version* is never hardcoded;
         # it always comes from GRAPH_API_VERSION above.

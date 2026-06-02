@@ -56,6 +56,30 @@ def test_session_cookie_secure_defaults_to_true(monkeypatch):
     assert app.config["SESSION_COOKIE_SECURE"] is True
 
 
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        ("False", False),
+        ("false", False),
+        ("0", False),
+        ("no", False),
+        ("off", False),
+        ("True", True),
+        ("1", True),
+        # Unrecognized values stay secure (fail-safe).
+        ("weird", True),
+    ],
+)
+def test_session_cookie_secure_parsing(monkeypatch, value, expected):
+    monkeypatch.setenv("SECRET_KEY", "test-secret")
+    monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", VALID_KEY)
+    monkeypatch.setenv("SESSION_COOKIE_SECURE", value)
+
+    app = create_app()
+
+    assert app.config["SESSION_COOKIE_SECURE"] is expected
+
+
 def test_database_defaults_to_absolute_instance_path(monkeypatch):
     monkeypatch.setenv("SECRET_KEY", "test-secret")
     monkeypatch.setenv("TOKEN_ENCRYPTION_KEY", VALID_KEY)

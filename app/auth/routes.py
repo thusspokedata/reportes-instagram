@@ -32,6 +32,9 @@ bp = Blueprint("auth", __name__, url_prefix="/auth")
 @bp.route("/login")
 def login():
     """Start the OAuth flow: store a fresh state and redirect to Meta."""
+    # Drop any prior session content (stale state, fixated session) before
+    # issuing a fresh CSRF state.
+    session.clear()
     state = secrets.token_urlsafe(32)
     session["oauth_state"] = state
     return redirect(facebook.build_login_url(state))

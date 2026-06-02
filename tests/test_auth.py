@@ -54,6 +54,20 @@ def test_login_redirects_to_meta_with_state(client, app):
         assert sess["oauth_state"] in location
 
 
+def test_login_clears_existing_session(client):
+    with client.session_transaction() as sess:
+        sess["stale"] = "value"
+        sess["logged_in"] = True
+
+    client.get("/auth/login")
+
+    with client.session_transaction() as sess:
+        # Stale session data is dropped; only a fresh state remains.
+        assert not sess.get("stale")
+        assert not sess.get("logged_in")
+        assert sess.get("oauth_state")
+
+
 # --- /auth/callback: state anti-CSRF ------------------------------------
 
 def test_callback_rejects_missing_state(client):
@@ -86,6 +100,8 @@ def test_callback_success_logs_in_and_redirects(client, monkeypatch):
     assert response.status_code == 302
     with client.session_transaction() as sess:
         assert sess.get("logged_in") is True
+        # The one-time CSRF state must be consumed on success too.
+        assert not sess.get("oauth_state")
 
 
 def test_callback_stores_token_encrypted(client, app, monkeypatch):
