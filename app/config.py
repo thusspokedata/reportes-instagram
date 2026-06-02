@@ -28,6 +28,7 @@ class Config:
         self.FACEBOOK_APP_SECRET = os.environ.get("FACEBOOK_APP_SECRET")
         self.REDIRECT_URI = os.environ.get("REDIRECT_URI")
         self.GRAPH_API_VERSION = os.environ.get("GRAPH_API_VERSION")
-        self.DATABASE = os.environ.get(
-            "DATABASE", os.path.join("instance", "reportes.db")
-        )
+        # If unset, the factory derives an absolute default from the app's
+        # instance_path (see create_app). A relative default would be resolved
+        # against the process CWD, which is brittle under gunicorn/systemd.
+        self.DATABASE = os.environ.get("DATABASE")

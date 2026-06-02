@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from app import create_app
@@ -18,10 +20,21 @@ def test_missing_secret_key_fails_loudly(env, monkeypatch):
         create_app()
 
 
-def test_database_defaults_to_instance_path(monkeypatch):
+def test_database_defaults_to_absolute_instance_path(monkeypatch):
     monkeypatch.setenv("SECRET_KEY", "test-secret")
     monkeypatch.delenv("DATABASE", raising=False)
 
     app = create_app()
+    db_path = app.config["DATABASE"]
 
-    assert app.config["DATABASE"].endswith("instance/reportes.db")
+    # Must be absolute and rooted at instance_path, so the resolved DB does not
+    # depend on the process working directory (gunicorn under systemd, etc.).
+    assert os.path.isabs(db_path)
+    assert db_path == os.path.join(app.instance_path, "reportes.db")
+
+
+def test_database_env_var_wins_over_default(env):
+    app = create_app()
+
+    # The fixture points DATABASE at a temp file; the env value must be honored.
+    assert app.config["DATABASE"] == str(env["db_path"])
