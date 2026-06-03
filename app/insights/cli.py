@@ -27,7 +27,12 @@ def fetch_insights_command():
             # Resolver la cuenta IG una sola vez por usuaria (rate limit).
             ig_id = fetch.resolve_ig_account(user)
 
-            save_account_snapshot(user, fetch.fetch_account_insights(user, ig_id))
+            # Conteo actual de seguidores: del perfil (no de la métrica de
+            # insights, que es un delta y devuelve vacío -> None, no 0).
+            profile = fetch.fetch_profile(user, ig_id)
+            account = fetch.fetch_account_insights(user, ig_id)
+            account["follower_count"] = profile.get("followers_count")
+            save_account_snapshot(user, account)
 
             posts = []
             for media in fetch.fetch_media_list(user, ig_id):
@@ -37,7 +42,18 @@ def fetch_insights_command():
                 posts.append(fetch.normalize_post(media, insights))
             save_post_metrics(user, posts)
 
-            click.echo(f"OK usuaria {user['id']}: cuenta + {len(posts)} posts")
+            # Validar contra el conteo de posts del perfil; loguear discrepancia.
+            expected = profile.get("media_count")
+            if expected is not None and len(posts) != expected:
+                click.echo(
+                    f"  aviso: se bajaron {len(posts)} posts pero el perfil "
+                    f"reporta {expected} (media_count)."
+                )
+
+            click.echo(
+                f"OK usuaria {user['id']}: followers="
+                f"{profile.get('followers_count')} + {len(posts)} posts"
+            )
         except RateLimitError:
             click.echo(
                 "Límite de solicitudes de Meta alcanzado; abortando sin reintentos."

@@ -11,6 +11,7 @@ loguea ni se incluye en mensajes de error.
 
 import logging
 from typing import Optional
+from urllib.parse import parse_qs, urlparse
 
 import requests
 from flask import current_app
@@ -23,16 +24,22 @@ _TIMEOUT = 15
 # Códigos de error de Meta asociados a límite de solicitudes.
 _RATE_LIMIT_CODES = {4, 17, 32, 613}
 
-# Subconjunto de métricas de CUENTA de esta spec (nombres/period vigentes v23.0).
-# Sumar el resto después repitiendo el patrón.
+# Métricas de CUENTA de insights (endpoint /insights). NOTA: follower_count NO
+# va acá. La métrica de insights `follower_count` (sin "s") es la serie temporal
+# de NUEVOS seguidores por period y devuelve vacío (no 0) si no hay datos; no es
+# el total. El conteo actual de seguidores se lee del FIELD del perfil
+# `followers_count` (con "s") en fetch_profile().
 ACCOUNT_METRICS = (
     ("reach", {"period": "day", "metric_type": "total_value"}),
-    ("follower_count", {"period": "day"}),
 )
+# Fields del perfil del IG user (conteos actuales, en tiempo real).
+PROFILE_FIELDS = "followers_count,media_count,username"
 # Métricas de POST que se piden como insights. likes/comments NO van acá:
 # se leen como fields del media object (like_count, comments_count).
 MEDIA_INSIGHT_METRICS = ("reach",)
 MEDIA_FIELDS = "id,media_type,permalink,caption,timestamp,like_count,comments_count"
+# Tope de seguridad de páginas al paginar media (rate limit ~200/h).
+_MAX_MEDIA_PAGES = 25
 
 
 class InsightsError(Exception):
@@ -108,10 +115,39 @@ def _extract_metric_value(data):
     return None
 
 
-def fetch_account_insights(user, ig_id=None) -> dict:
-    """Baja, de forma defensiva, las métricas de cuenta de esta spec.
+def fetch_profile(user, ig_id=None) -> dict:
+    """Lee los conteos actuales del perfil del IG user (en tiempo real).
 
-    Si se pasa ``ig_id`` (ya resuelto), evita la llamada extra a ``me/accounts``.
+    Devuelve ``{followers_count, media_count, username}``. Defensivo: si la
+    llamada falla (salvo rate limit), devuelve ``{}`` -> los conteos quedan
+    ``None`` (NUNCA 0). El conteo de seguidores del snapshot sale de acá, no de
+    la métrica de insights.
+    """
+    token = decrypt_token(user["access_token_cifrado"])
+    if ig_id is None:
+        ig_id = _resolve_ig_user_id(token)
+    try:
+        data = _graph_get(ig_id, {"fields": PROFILE_FIELDS}, token)
+    except RateLimitError:
+        raise
+    except (InsightsError, TypeError, AttributeError, KeyError):
+        logger.warning("No se pudo leer el perfil de la cuenta; se saltea.")
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {
+        "followers_count": data.get("followers_count"),
+        "media_count": data.get("media_count"),
+        "username": data.get("username"),
+    }
+
+
+def fetch_account_insights(user, ig_id=None) -> dict:
+    """Baja, de forma defensiva, las métricas de cuenta (insights) de esta spec.
+
+    Devuelve sólo métricas de insights (ej. reach). El conteo de seguidores NO
+    sale de acá: ver ``fetch_profile``. Si se pasa ``ig_id`` (ya resuelto), evita
+    la llamada extra a ``me/accounts``.
     """
     token = decrypt_token(user["access_token_cifrado"])
     if ig_id is None:
@@ -129,6 +165,13 @@ def fetch_account_insights(user, ig_id=None) -> dict:
     return result
 
 
+def _after_from_url(url) -> Optional[str]:
+    """Extrae el cursor `after` de una URL de paginación de Meta."""
+    if not isinstance(url, str):
+        return None
+    return parse_qs(urlparse(url).query).get("after", [None])[0]
+
+
 def fetch_media_list(user, ig_id=None) -> list:
     """Trae la lista de media de la usuaria (con like_count/comments_count).
 
@@ -137,9 +180,35 @@ def fetch_media_list(user, ig_id=None) -> list:
     token = decrypt_token(user["access_token_cifrado"])
     if ig_id is None:
         ig_id = _resolve_ig_user_id(token)
-    data = _graph_get(f"{ig_id}/media", {"fields": MEDIA_FIELDS}, token)
-    media = data.get("data") if isinstance(data, dict) else None
-    return [m for m in (media or []) if isinstance(m, dict)]
+
+    all_media = []
+    params = {"fields": MEDIA_FIELDS, "limit": 100}
+    pages = 0
+    while pages < _MAX_MEDIA_PAGES:
+        data = _graph_get(f"{ig_id}/media", params, token)
+        page = data.get("data") if isinstance(data, dict) else None
+        all_media.extend(m for m in (page or []) if isinstance(m, dict))
+        pages += 1
+
+        # Seguir el cursor `after` mientras Meta indique que hay más páginas.
+        paging = data.get("paging") if isinstance(data, dict) else None
+        cursor = None
+        if isinstance(paging, dict) and paging.get("next"):
+            cursor = (paging.get("cursors") or {}).get("after")
+            # Fallback: si vino `next` (URL) pero no expuso el cursor, sacarlo
+            # de la query de la URL `next`.
+            if not cursor:
+                cursor = _after_from_url(paging["next"])
+        if not cursor:
+            break
+        params = {"fields": MEDIA_FIELDS, "limit": 100, "after": cursor}
+
+    if pages >= _MAX_MEDIA_PAGES:
+        logger.warning(
+            "Paginación de media alcanzó el tope de %d páginas; puede faltar media.",
+            _MAX_MEDIA_PAGES,
+        )
+    return all_media
 
 
 def fetch_media_insights(user, media_id, media_type=None) -> dict:

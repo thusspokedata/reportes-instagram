@@ -37,19 +37,31 @@ def test_account_fetch_is_defensive(app_ctx, monkeypatch):
     def fake(path, params, token):
         if path == "me/accounts":
             return {"data": [{"instagram_business_account": {"id": "IG1"}}]}
-        if params.get("metric") == "reach":
-            return {"data": [{"name": "reach", "total_value": {"value": 50}}]}
-        if params.get("metric") == "follower_count":
-            raise InsightsError("metric deprecated/unavailable")
-        raise AssertionError(path)
+        raise InsightsError("metric deprecated/unavailable")  # reach falla
 
     monkeypatch.setattr(fetch, "_graph_get", fake)
 
     result = fetch.fetch_account_insights(_user())
 
-    # reach succeeds, follower_count fails -> skipped, not fatal.
+    # La métrica caída se saltea (None), no es fatal.
+    assert result["reach"] is None
+
+
+def test_account_insights_excludes_follower_count(app_ctx, monkeypatch):
+    # follower_count NO se pide a insights (sale del perfil). El extractor de
+    # la métrica de insights nunca debe terminar escribiendo follower_count.
+    def fake(path, params, token):
+        if path == "me/accounts":
+            return {"data": [{"instagram_business_account": {"id": "IG1"}}]}
+        assert params.get("metric") == "reach"  # sólo reach a insights
+        return {"data": [{"name": "reach", "total_value": {"value": 50}}]}
+
+    monkeypatch.setattr(fetch, "_graph_get", fake)
+
+    result = fetch.fetch_account_insights(_user())
+
     assert result["reach"] == 50
-    assert result["follower_count"] is None
+    assert "follower_count" not in result
 
 
 def test_account_fetch_skips_resolution_when_ig_id_passed(app_ctx, monkeypatch):
@@ -76,20 +88,112 @@ def test_resolve_ig_account_returns_id(app_ctx, monkeypatch):
     assert fetch.resolve_ig_account(_user()) == "IG999"
 
 
-def test_follower_count_empty_is_null(app_ctx, monkeypatch):
+def test_fetch_profile_reads_followers_and_media_count(app_ctx, monkeypatch):
     def fake(path, params, token):
         if path == "me/accounts":
             return {"data": [{"instagram_business_account": {"id": "IG1"}}]}
-        if params.get("metric") == "reach":
-            return {"data": [{"name": "reach", "total_value": {"value": 50}}]}
-        return {"data": []}  # <100 seguidores -> Meta no devuelve follower_count
+        # Perfil: GET /{ig_id}?fields=followers_count,media_count,username
+        assert "followers_count" in params.get("fields", "")
+        return {"followers_count": 147, "media_count": 13, "username": "lahuella"}
 
     monkeypatch.setattr(fetch, "_graph_get", fake)
 
-    result = fetch.fetch_account_insights(_user())
+    profile = fetch.fetch_profile(_user())
 
-    assert result["reach"] == 50
-    assert result["follower_count"] is None  # ausencia, no error, no 0
+    assert profile["followers_count"] == 147
+    assert profile["media_count"] == 13
+    assert profile["username"] == "lahuella"
+
+
+def test_fetch_profile_missing_followers_is_none(app_ctx, monkeypatch):
+    def fake(path, params, token):
+        if path == "me/accounts":
+            return {"data": [{"instagram_business_account": {"id": "IG1"}}]}
+        return {"username": "lahuella"}  # sin followers_count
+
+    monkeypatch.setattr(fetch, "_graph_get", fake)
+
+    profile = fetch.fetch_profile(_user())
+
+    # Ausencia de dato = None, NUNCA 0.
+    assert profile["followers_count"] is None
+
+
+def test_fetch_profile_defensive_on_error(app_ctx, monkeypatch):
+    def fake(path, params, token):
+        if path == "me/accounts":
+            return {"data": [{"instagram_business_account": {"id": "IG1"}}]}
+        raise InsightsError("perfil no disponible")
+
+    monkeypatch.setattr(fetch, "_graph_get", fake)
+
+    profile = fetch.fetch_profile(_user())
+
+    # No crashea; followers queda None (no 0).
+    assert profile.get("followers_count") is None
+
+
+def test_media_list_paginates_following_cursor(app_ctx, monkeypatch):
+    def fake(path, params, token):
+        if path == "me/accounts":
+            return {"data": [{"instagram_business_account": {"id": "IG1"}}]}
+        # Página 1: trae cursor `after`; página 2: sin `next` -> corta.
+        if params.get("after") is None:
+            return {
+                "data": [{"id": "M1"}, {"id": "M2"}],
+                "paging": {"next": "http://next", "cursors": {"after": "CUR2"}},
+            }
+        assert params.get("after") == "CUR2"
+        return {"data": [{"id": "M3"}], "paging": {"cursors": {"after": "CUR3"}}}
+
+    monkeypatch.setattr(fetch, "_graph_get", fake)
+
+    media = fetch.fetch_media_list(_user(), ig_id="IG1")
+
+    ids = [m["id"] for m in media]
+    assert ids == ["M1", "M2", "M3"]  # trae las dos páginas, sin duplicar
+
+
+def test_media_list_parses_after_from_next_url_when_cursor_missing(app_ctx, monkeypatch):
+    # Meta a veces da paging.next (URL) sin exponer cursors.after.
+    def fake(path, params, token):
+        if path == "me/accounts":
+            return {"data": [{"instagram_business_account": {"id": "IG1"}}]}
+        if params.get("after") is None:
+            return {
+                "data": [{"id": "M1"}],
+                "paging": {"next": "https://graph.facebook.com/v23.0/IG1/media?after=CURX"},
+            }
+        assert params.get("after") == "CURX"
+        return {"data": [{"id": "M2"}], "paging": {}}
+
+    monkeypatch.setattr(fetch, "_graph_get", fake)
+
+    media = fetch.fetch_media_list(_user(), ig_id="IG1")
+
+    assert [m["id"] for m in media] == ["M1", "M2"]
+
+
+def test_media_list_respects_page_cap(app_ctx, monkeypatch):
+    counter = {"n": 0}
+
+    def fake(path, params, token):
+        if path == "me/accounts":
+            return {"data": [{"instagram_business_account": {"id": "IG1"}}]}
+        counter["n"] += 1
+        n = counter["n"]
+        # Siempre hay "más" -> sólo el tope debe cortar el loop.
+        return {
+            "data": [{"id": f"M{n}"}],
+            "paging": {"next": "http://n", "cursors": {"after": f"C{n}"}},
+        }
+
+    monkeypatch.setattr(fetch, "_graph_get", fake)
+
+    media = fetch.fetch_media_list(_user(), ig_id="IG1")
+
+    # Corta en el tope, no entra en loop infinito.
+    assert len(media) == fetch._MAX_MEDIA_PAGES
 
 
 def test_rate_limit_propagates_not_swallowed(app_ctx, monkeypatch):
@@ -182,17 +286,14 @@ def test_account_fetch_defensive_against_malformed_response(app_ctx, monkeypatch
     def fake(path, params, token):
         if path == "me/accounts":
             return {"data": [{"instagram_business_account": {"id": "IG1"}}]}
-        if params.get("metric") == "reach":
-            return {"data": "garbage"}  # forma malformada
-        return {"data": [{"name": "follower_count", "values": [{"value": 120}]}]}
+        return {"data": "garbage"}  # forma malformada para reach
 
     monkeypatch.setattr(fetch, "_graph_get", fake)
 
     result = fetch.fetch_account_insights(_user())
 
-    # La métrica malformada se saltea (None); la otra sigue funcionando.
+    # La métrica malformada se saltea (None), no crashea.
     assert result["reach"] is None
-    assert result["follower_count"] == 120
 
 
 def test_normalize_post_tolerates_non_dict(app_ctx):
