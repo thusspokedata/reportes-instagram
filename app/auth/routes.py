@@ -81,9 +81,11 @@ def callback():
     expira_en = None
     try:
         if expires_in:
-            expira_en = datetime.now(timezone.utc) + timedelta(
-                seconds=int(expires_in)
-            )
+            # Naive UTC: el converter TIMESTAMP de sqlite no parsea el offset de
+            # un datetime aware (rompería lecturas posteriores en Python 3.12).
+            expira_en = (
+                datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
+            ).replace(tzinfo=None)
     except (TypeError, ValueError):
         # Meta returned an unexpected expires_in; store with no expiry rather
         # than crashing the login.

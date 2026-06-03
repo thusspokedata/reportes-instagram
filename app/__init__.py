@@ -56,8 +56,13 @@ def create_app():
     # DB teardown + `flask init-db` command.
     db.init_app(app)
 
-    # `flask fetch-insights` command.
+    # `flask fetch-insights` + `flask daily-snapshot` commands.
     insights.init_app(app)
+
+    # `flask refresh-tokens` command.
+    from .auth import refresh as auth_refresh
+
+    auth_refresh.init_app(app)
 
     # Blueprints.
     app.register_blueprint(main_bp)

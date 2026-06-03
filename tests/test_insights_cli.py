@@ -99,6 +99,38 @@ def test_fetch_insights_warns_on_media_count_discrepancy(
     assert "13" in result.output and "media_count" in result.output
 
 
+def test_daily_snapshot_is_idempotent_and_skips_posts(user_factory, inited_app, monkeypatch):
+    user = user_factory()
+    monkeypatch.setattr(fetch, "resolve_ig_account", lambda u: "IG1")
+    monkeypatch.setattr(
+        fetch, "fetch_profile", lambda u, ig_id=None: {"followers_count": 147, "media_count": 10}
+    )
+    monkeypatch.setattr(fetch, "fetch_account_insights", lambda u, ig_id=None: {"reach": 228})
+    # daily-snapshot NO debe bajar posts:
+    monkeypatch.setattr(fetch, "fetch_media_list", lambda *a, **k: (_ for _ in ()).throw(
+        AssertionError("daily-snapshot no debe bajar posts")
+    ))
+
+    runner = inited_app.test_cli_runner()
+    r1 = runner.invoke(args=["daily-snapshot"])
+    r2 = runner.invoke(args=["daily-snapshot"])  # mismo día, otra vez
+
+    assert r1.exit_code == 0 and r2.exit_code == 0
+    with inited_app.app_context():
+        db = get_db()
+        snaps = db.execute(
+            "SELECT follower_count, reach FROM account_snapshots WHERE user_id = ?",
+            (user["id"],),
+        ).fetchall()
+        nposts = db.execute(
+            "SELECT COUNT(*) c FROM post_metrics WHERE user_id = ?", (user["id"],)
+        ).fetchone()["c"]
+    assert len(snaps) == 1  # idempotente por día
+    assert snaps[0]["follower_count"] == 147
+    assert snaps[0]["reach"] == 228
+    assert nposts == 0  # no tocó posts
+
+
 def test_fetch_insights_command_aborts_on_rate_limit(user_factory, inited_app, monkeypatch):
     user_factory()
 
