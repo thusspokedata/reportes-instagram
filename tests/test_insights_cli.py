@@ -9,8 +9,11 @@ def test_fetch_insights_command_persists(user_factory, inited_app, monkeypatch):
     monkeypatch.setattr(fetch, "resolve_ig_account", lambda u: "IG1")
     monkeypatch.setattr(
         fetch,
-        "fetch_account_insights",
-        lambda u, ig_id=None: {"reach": 100, "follower_count": None},
+        "fetch_profile",
+        lambda u, ig_id=None: {"followers_count": 147, "media_count": 1, "username": "x"},
+    )
+    monkeypatch.setattr(
+        fetch, "fetch_account_insights", lambda u, ig_id=None: {"reach": 100}
     )
     monkeypatch.setattr(
         fetch,
@@ -46,11 +49,33 @@ def test_fetch_insights_command_persists(user_factory, inited_app, monkeypatch):
             (user["id"],),
         ).fetchone()
 
+    # follower_count viene del perfil (147), no de insights.
+    assert snap["follower_count"] == 147
     assert snap["reach"] == 100
-    assert snap["follower_count"] is None
     assert post["likes"] == 5
     assert post["comments"] == 2
     assert post["reach"] == 33
+
+
+def test_fetch_insights_snapshot_follower_count_null_when_profile_empty(
+    user_factory, inited_app, monkeypatch
+):
+    user = user_factory()
+    monkeypatch.setattr(fetch, "resolve_ig_account", lambda u: "IG1")
+    # Perfil vacío (ej. <100 seguidores / Meta no devuelve) -> follower_count NULL.
+    monkeypatch.setattr(fetch, "fetch_profile", lambda u, ig_id=None: {})
+    monkeypatch.setattr(fetch, "fetch_account_insights", lambda u, ig_id=None: {"reach": 5})
+    monkeypatch.setattr(fetch, "fetch_media_list", lambda u, ig_id=None: [])
+
+    result = inited_app.test_cli_runner().invoke(args=["fetch-insights"])
+
+    assert result.exit_code == 0
+    with inited_app.app_context():
+        snap = get_db().execute(
+            "SELECT follower_count FROM account_snapshots WHERE user_id = ?",
+            (user["id"],),
+        ).fetchone()
+    assert snap["follower_count"] is None  # NULL, nunca 0
 
 
 def test_fetch_insights_command_aborts_on_rate_limit(user_factory, inited_app, monkeypatch):
