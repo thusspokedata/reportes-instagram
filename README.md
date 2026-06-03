@@ -41,7 +41,7 @@ llega en una fase posterior.
 
 ## Requisitos
 
-- Python 3.9+
+- Python 3.10+ (gunicorn 26 requiere 3.10+)
 
 ## Puesta en marcha (desarrollo)
 
