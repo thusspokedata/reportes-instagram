@@ -72,23 +72,28 @@ def _graph_get(path: str, params: dict, token: str) -> dict:
 def _resolve_ig_user_id(token: str) -> str:
     """Resuelve el id de la cuenta de Instagram Business desde el token."""
     data = _graph_get("me/accounts", {"fields": "instagram_business_account"}, token)
-    for page in data.get("data", []):
-        iga = page.get("instagram_business_account") or {}
-        if iga.get("id"):
+    pages = data.get("data") if isinstance(data, dict) else None
+    for page in pages or []:
+        iga = page.get("instagram_business_account") if isinstance(page, dict) else None
+        if isinstance(iga, dict) and iga.get("id"):
             return iga["id"]
     raise InsightsError("No se encontró una cuenta de Instagram Business vinculada.")
 
 
-def _extract_metric_value(data: dict):
-    """Extrae el valor de una respuesta de insights. Ausencia de dato -> None."""
-    items = data.get("data") or []
-    if not items:
+def _extract_metric_value(data):
+    """Extrae el valor de una respuesta de insights. Ausencia de dato o forma
+    inesperada -> None (defensivo: Meta puede devolver estructuras raras)."""
+    items = data.get("data") if isinstance(data, dict) else None
+    if not isinstance(items, list) or not items:
         return None
     item = items[0]
-    if "total_value" in item:
-        return (item["total_value"] or {}).get("value")
-    values = item.get("values") or []
-    if values:
+    if not isinstance(item, dict):
+        return None
+    total_value = item.get("total_value")
+    if isinstance(total_value, dict):
+        return total_value.get("value")
+    values = item.get("values")
+    if isinstance(values, list) and values and isinstance(values[-1], dict):
         return values[-1].get("value")
     return None
 
@@ -104,7 +109,7 @@ def fetch_account_insights(user) -> dict:
             result[name] = _extract_metric_value(data)
         except RateLimitError:
             raise  # no seguir golpeando el endpoint
-        except InsightsError:
+        except (InsightsError, TypeError, AttributeError, KeyError):
             logger.warning("Métrica de cuenta '%s' no disponible; se saltea.", name)
             result[name] = None
     return result
@@ -115,7 +120,8 @@ def fetch_media_list(user) -> list:
     token = decrypt_token(user["access_token_cifrado"])
     ig_id = _resolve_ig_user_id(token)
     data = _graph_get(f"{ig_id}/media", {"fields": MEDIA_FIELDS}, token)
-    return data.get("data", [])
+    media = data.get("data") if isinstance(data, dict) else None
+    return [m for m in (media or []) if isinstance(m, dict)]
 
 
 def fetch_media_insights(user, media_id, media_type=None) -> dict:
@@ -130,7 +136,7 @@ def fetch_media_insights(user, media_id, media_type=None) -> dict:
             result[name] = _extract_metric_value(data)
         except RateLimitError:
             raise
-        except InsightsError:
+        except (InsightsError, TypeError, AttributeError, KeyError):
             logger.warning(
                 "Métrica de media '%s' no disponible (media %s); se saltea.",
                 name,
@@ -140,9 +146,12 @@ def fetch_media_insights(user, media_id, media_type=None) -> dict:
     return result
 
 
-def normalize_post(media: dict, insights: dict = None) -> dict:
-    """Combina un media object + sus insights en un dict listo para persistir."""
-    insights = insights or {}
+def normalize_post(media, insights: dict = None) -> dict:
+    """Combina un media object + sus insights en un dict listo para persistir.
+
+    Tolera entradas no-dict (Meta puede devolver estructuras raras)."""
+    media = media if isinstance(media, dict) else {}
+    insights = insights if isinstance(insights, dict) else {}
     return {
         "media_id": media.get("id"),
         "media_type": media.get("media_type"),

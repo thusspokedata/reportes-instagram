@@ -1,5 +1,6 @@
 from app.db import get_db
 from app.insights import fetch
+from app.insights.fetch import RateLimitError
 
 
 def test_fetch_insights_command_persists(user_factory, inited_app, monkeypatch):
@@ -47,3 +48,18 @@ def test_fetch_insights_command_persists(user_factory, inited_app, monkeypatch):
     assert post["likes"] == 5
     assert post["comments"] == 2
     assert post["reach"] == 33
+
+
+def test_fetch_insights_command_aborts_on_rate_limit(user_factory, inited_app, monkeypatch):
+    user_factory()
+
+    def boom(u):
+        raise RateLimitError("rate limited")
+
+    monkeypatch.setattr(fetch, "fetch_account_insights", boom)
+
+    result = inited_app.test_cli_runner().invoke(args=["fetch-insights"])
+
+    # Corta limpio (sin reintentos agresivos) y avisa.
+    assert result.exit_code == 0
+    assert "Límite de solicitudes" in result.output

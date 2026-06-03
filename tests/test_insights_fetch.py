@@ -145,6 +145,37 @@ def test_normalize_post_maps_fields():
 
 # --- low-level HTTP error handling ---------------------------------------
 
+def test_extract_metric_value_tolerates_garbage(app_ctx):
+    # Respuestas con formas inesperadas -> None, nunca crash.
+    assert fetch._extract_metric_value({"data": "garbage"}) is None
+    assert fetch._extract_metric_value({"data": [42]}) is None
+    assert fetch._extract_metric_value("nope") is None
+    assert fetch._extract_metric_value({}) is None
+    assert fetch._extract_metric_value({"data": [{"total_value": None}]}) is None
+
+
+def test_account_fetch_defensive_against_malformed_response(app_ctx, monkeypatch):
+    def fake(path, params, token):
+        if path == "me/accounts":
+            return {"data": [{"instagram_business_account": {"id": "IG1"}}]}
+        if params.get("metric") == "reach":
+            return {"data": "garbage"}  # forma malformada
+        return {"data": [{"name": "follower_count", "values": [{"value": 120}]}]}
+
+    monkeypatch.setattr(fetch, "_graph_get", fake)
+
+    result = fetch.fetch_account_insights(_user())
+
+    # La métrica malformada se saltea (None); la otra sigue funcionando.
+    assert result["reach"] is None
+    assert result["follower_count"] == 120
+
+
+def test_normalize_post_tolerates_non_dict(app_ctx):
+    assert fetch.normalize_post(None)["media_id"] is None
+    assert fetch.normalize_post("garbage")["likes"] is None
+
+
 def test_graph_get_rate_limit_code(app_ctx, monkeypatch):
     monkeypatch.setattr(
         fetch.requests,
