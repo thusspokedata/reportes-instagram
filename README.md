@@ -50,8 +50,10 @@ flask daily-snapshot   # snapshot diario liviano de cuenta (sin re-bajar posts)
 - `refresh-tokens`: refresca el token de Facebook Login **sólo** si le quedan
   ≤15 días para vencer y tiene ≥24h de antigüedad; guarda el nuevo cifrado con
   su nuevo vencimiento. Es **condicional e idempotente** → correrlo a diario es
-  seguro. Si el token ya venció, marca `expired_relogin` (hay que rehacer el
-  login OAuth). **Importante:** un token largo que pasa 60 días sin refrescarse
+  seguro. Si el token ya venció, devuelve el `status` `expired_relogin` (es un
+  valor de retorno de runtime que indica que hay que rehacer el login OAuth; no
+  se persiste ningún flag en la DB). **Importante:** un token largo que pasa 60
+  días sin refrescarse
   expira y ya no se puede renovar — por eso conviene el cron diario.
 - `daily-snapshot`: graba el snapshot de cuenta del día (seguidores + reach),
   idempotente por día. Liviano: no re-baja los posts (eso es `fetch-insights`).

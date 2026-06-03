@@ -80,7 +80,8 @@ def callback():
 
     expira_en = None
     try:
-        if expires_in:
+        # `is not None`: un expires_in de 0 es válido (distinto de ausente).
+        if expires_in is not None:
             # Naive UTC: el converter TIMESTAMP de sqlite no parsea el offset de
             # un datetime aware (rompería lecturas posteriores en Python 3.12).
             expira_en = (

@@ -13,6 +13,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 import click
+from cryptography.fernet import InvalidToken
 from flask.cli import with_appcontext
 
 from . import facebook
@@ -71,9 +72,14 @@ def refresh_token_if_needed(user, now=None):
     if issued is not None and (now - issued) < MIN_TOKEN_AGE:
         return {"status": "too_young", "user_id": user_id}
 
-    token = decrypt_token(user["access_token_cifrado"])
     try:
+        # Descifrar dentro del try: un token corrupto/ilegible no debe abortar
+        # el refresh de las demás usuarias.
+        token = decrypt_token(user["access_token_cifrado"])
         new_token, expires_in = facebook.refresh_long_lived_token(token)
+    except InvalidToken:
+        logger.warning("No se pudo descifrar el token de la usuaria %s.", user_id)
+        return {"status": "error", "user_id": user_id}
     except facebook.OAuthError:
         # OAuthError cubre cualquier fallo de Meta (incl. rate limit, token
         # revocado): se registra sin token y se sigue con las demás usuarias.
@@ -82,7 +88,9 @@ def refresh_token_if_needed(user, now=None):
 
     new_expira = None
     try:
-        if expires_in:
+        # `is not None`: un expires_in de 0 (expiración inmediata) es un dato
+        # válido distinto de "no vino" (None).
+        if expires_in is not None:
             # Naive UTC: el converter de sqlite no maneja el offset de un aware.
             new_expira = (now + timedelta(seconds=int(expires_in))).replace(tzinfo=None)
     except (TypeError, ValueError):

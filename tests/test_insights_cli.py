@@ -100,6 +100,19 @@ def test_fetch_insights_warns_on_media_count_discrepancy(
 
 
 def test_daily_snapshot_is_idempotent_and_skips_posts(user_factory, inited_app, monkeypatch):
+    from datetime import date
+
+    from app.insights import store
+
+    # Congelar el día: save_account_snapshot usa date.today(); sin esto, si las
+    # dos invocaciones cruzan medianoche caerían en snapshot_date distintos.
+    class _FixedDate(date):
+        @classmethod
+        def today(cls):
+            return date(2026, 6, 3)
+
+    monkeypatch.setattr(store, "date", _FixedDate)
+
     user = user_factory()
     monkeypatch.setattr(fetch, "resolve_ig_account", lambda u: "IG1")
     monkeypatch.setattr(
