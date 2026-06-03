@@ -52,6 +52,30 @@ def test_account_fetch_is_defensive(app_ctx, monkeypatch):
     assert result["follower_count"] is None
 
 
+def test_account_fetch_skips_resolution_when_ig_id_passed(app_ctx, monkeypatch):
+    def fake(path, params, token):
+        if path == "me/accounts":
+            raise AssertionError("no debería resolver: ig_id ya provisto")
+        return {"data": [{"name": "reach", "total_value": {"value": 7}}]}
+
+    monkeypatch.setattr(fetch, "_graph_get", fake)
+
+    result = fetch.fetch_account_insights(_user(), ig_id="IG1")
+
+    assert result["reach"] == 7
+
+
+def test_resolve_ig_account_returns_id(app_ctx, monkeypatch):
+    monkeypatch.setattr(
+        fetch,
+        "_graph_get",
+        lambda path, params, token: {
+            "data": [{"instagram_business_account": {"id": "IG999"}}]
+        },
+    )
+    assert fetch.resolve_ig_account(_user()) == "IG999"
+
+
 def test_follower_count_empty_is_null(app_ctx, monkeypatch):
     def fake(path, params, token):
         if path == "me/accounts":

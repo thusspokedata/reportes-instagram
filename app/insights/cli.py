@@ -24,10 +24,13 @@ def fetch_insights_command():
 
     for user in users:
         try:
-            save_account_snapshot(user, fetch.fetch_account_insights(user))
+            # Resolver la cuenta IG una sola vez por usuaria (rate limit).
+            ig_id = fetch.resolve_ig_account(user)
+
+            save_account_snapshot(user, fetch.fetch_account_insights(user, ig_id))
 
             posts = []
-            for media in fetch.fetch_media_list(user):
+            for media in fetch.fetch_media_list(user, ig_id):
                 insights = fetch.fetch_media_insights(
                     user, media.get("id"), media.get("media_type")
                 )

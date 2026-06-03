@@ -10,6 +10,7 @@ loguea ni se incluye en mensajes de error.
 """
 
 import logging
+from typing import Optional
 
 import requests
 from flask import current_app
@@ -80,6 +81,15 @@ def _resolve_ig_user_id(token: str) -> str:
     raise InsightsError("No se encontró una cuenta de Instagram Business vinculada.")
 
 
+def resolve_ig_account(user) -> str:
+    """Resuelve el id de la cuenta IG Business de una usuaria (una llamada).
+
+    Pensado para resolverlo UNA vez por corrida y pasarlo a las funciones de
+    fetch, conservando el presupuesto de rate limit.
+    """
+    return _resolve_ig_user_id(decrypt_token(user["access_token_cifrado"]))
+
+
 def _extract_metric_value(data):
     """Extrae el valor de una respuesta de insights. Ausencia de dato o forma
     inesperada -> None (defensivo: Meta puede devolver estructuras raras)."""
@@ -98,10 +108,14 @@ def _extract_metric_value(data):
     return None
 
 
-def fetch_account_insights(user) -> dict:
-    """Baja, de forma defensiva, las métricas de cuenta de esta spec."""
+def fetch_account_insights(user, ig_id=None) -> dict:
+    """Baja, de forma defensiva, las métricas de cuenta de esta spec.
+
+    Si se pasa ``ig_id`` (ya resuelto), evita la llamada extra a ``me/accounts``.
+    """
     token = decrypt_token(user["access_token_cifrado"])
-    ig_id = _resolve_ig_user_id(token)
+    if ig_id is None:
+        ig_id = _resolve_ig_user_id(token)
     result = {}
     for name, params in ACCOUNT_METRICS:
         try:
@@ -115,10 +129,14 @@ def fetch_account_insights(user) -> dict:
     return result
 
 
-def fetch_media_list(user) -> list:
-    """Trae la lista de media de la usuaria (con like_count/comments_count)."""
+def fetch_media_list(user, ig_id=None) -> list:
+    """Trae la lista de media de la usuaria (con like_count/comments_count).
+
+    Si se pasa ``ig_id`` (ya resuelto), evita la llamada extra a ``me/accounts``.
+    """
     token = decrypt_token(user["access_token_cifrado"])
-    ig_id = _resolve_ig_user_id(token)
+    if ig_id is None:
+        ig_id = _resolve_ig_user_id(token)
     data = _graph_get(f"{ig_id}/media", {"fields": MEDIA_FIELDS}, token)
     media = data.get("data") if isinstance(data, dict) else None
     return [m for m in (media or []) if isinstance(m, dict)]
@@ -146,7 +164,7 @@ def fetch_media_insights(user, media_id, media_type=None) -> dict:
     return result
 
 
-def normalize_post(media, insights: dict = None) -> dict:
+def normalize_post(media, insights: Optional[dict] = None) -> dict:
     """Combina un media object + sus insights en un dict listo para persistir.
 
     Tolera entradas no-dict (Meta puede devolver estructuras raras)."""

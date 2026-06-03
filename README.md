@@ -6,8 +6,9 @@ Pequeña web app privada para ver métricas de Instagram Business.
 server-side, Chart.js. OAuth vía Facebook Login y datos vía Instagram Graph
 API (versión configurable, ver `GRAPH_API_VERSION`).
 
-> Estado: scaffolding (SPEC 01) + login OAuth con Facebook (SPEC 02). La
-> bajada de datos / métricas llega en specs posteriores.
+> Estado: scaffolding (SPEC 01) + login OAuth con Facebook (SPEC 02) + bajada
+> de insights a SQLite (SPEC 03). Los gráficos / dashboard y la automatización
+> por cron llegan en specs posteriores.
 
 ## Login (OAuth)
 

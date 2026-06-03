@@ -6,13 +6,16 @@ from app.insights.fetch import RateLimitError
 def test_fetch_insights_command_persists(user_factory, inited_app, monkeypatch):
     user = user_factory()
 
+    monkeypatch.setattr(fetch, "resolve_ig_account", lambda u: "IG1")
     monkeypatch.setattr(
-        fetch, "fetch_account_insights", lambda u: {"reach": 100, "follower_count": None}
+        fetch,
+        "fetch_account_insights",
+        lambda u, ig_id=None: {"reach": 100, "follower_count": None},
     )
     monkeypatch.setattr(
         fetch,
         "fetch_media_list",
-        lambda u: [
+        lambda u, ig_id=None: [
             {
                 "id": "M1",
                 "media_type": "IMAGE",
@@ -56,7 +59,8 @@ def test_fetch_insights_command_aborts_on_rate_limit(user_factory, inited_app, m
     def boom(u):
         raise RateLimitError("rate limited")
 
-    monkeypatch.setattr(fetch, "fetch_account_insights", boom)
+    # El primer toque de red del run es la resolución de la cuenta IG.
+    monkeypatch.setattr(fetch, "resolve_ig_account", boom)
 
     result = inited_app.test_cli_runner().invoke(args=["fetch-insights"])
 

@@ -1,5 +1,5 @@
--- Esquema de datos. Simple y extensible: en specs posteriores se suman
--- tablas de snapshots de métricas que referenciarán a `usuarias`.
+-- Esquema de datos: usuarias (OAuth) + snapshots de cuenta y métricas de post
+-- (insights). Simple y extensible; las métricas nuevas se suman como columnas.
 
 CREATE TABLE IF NOT EXISTS usuarias (
     id                    INTEGER PRIMARY KEY AUTOINCREMENT,
