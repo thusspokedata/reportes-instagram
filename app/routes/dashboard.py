@@ -99,8 +99,10 @@ def dashboard():
         " WHERE user_id = ? ORDER BY snapshot_date DESC LIMIT 1",
         (user_id,),
     ).fetchone()
+    # Minimización de datos: sólo las columnas que el dashboard usa
+    # (caption/permalink no se renderizan, no se traen).
     posts = db.execute(
-        "SELECT media_id, media_type, permalink, caption, timestamp, likes, comments, reach"
+        "SELECT media_id, media_type, timestamp, likes, comments, reach"
         " FROM post_metrics WHERE user_id = ? ORDER BY timestamp",
         (user_id,),
     ).fetchall()

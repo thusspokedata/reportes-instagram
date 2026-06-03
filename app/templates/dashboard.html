@@ -36,6 +36,18 @@
     <p class="note">Likes y comentarios por publicación. Los posts sin una
       métrica no se grafican como 0 (quedan vacíos).</p>
     {% if data.engagement %}
+      <p class="medians">
+        Medianas (no promedios) —
+        likes:
+        {%- if data.medians.likes is not none %} {{ data.medians.likes }}
+        {%- else %} <span class="nodata">sin dato</span>{% endif %};
+        comentarios:
+        {%- if data.medians.comments is not none %} {{ data.medians.comments }}
+        {%- else %} <span class="nodata">sin dato</span>{% endif %};
+        reach:
+        {%- if data.medians.reach is not none %} {{ data.medians.reach }}
+        {%- else %} <span class="nodata">sin dato</span>{% endif %}.
+      </p>
       <canvas id="chart-engagement" height="120"></canvas>
     {% else %}
       <p class="empty">Todavía no hay posts en la base.</p>
@@ -53,8 +65,10 @@
 
   <section class="panel">
     <h2>Reach mediano por tipo de media</h2>
-    <p class="caution">⚠ Muestra chica, no concluyente (N&lt;{{ data.min_sample }}).
-      Descriptivo, no es una recomendación.</p>
+    {% if not data.enough_sample %}
+      <p class="caution">⚠ Muestra chica, no concluyente (N&lt;{{ data.min_sample }}).
+        Descriptivo, no es una recomendación.</p>
+    {% endif %}
     {% if data.reach_by_type %}
       <canvas id="chart-reach-type" height="120"></canvas>
     {% else %}
@@ -77,8 +91,13 @@
 
   <section class="panel placeholder">
     <h2>Mejor día / horario para publicar</h2>
-    <p class="empty">Datos insuficientes: se necesitan al menos
-      {{ data.min_sample }} posts y tenés {{ data.summary.posts }}.</p>
+    <p class="empty">
+      Análisis pendiente (se implementa en una fase posterior).
+      {% if not data.enough_sample %}
+        Además requiere al menos {{ data.min_sample }} posts; hoy tenés
+        {{ data.summary.posts }}.
+      {% endif %}
+    </p>
   </section>
 
   {# Datos calculados en backend, serializados de forma segura para Chart.js. #}

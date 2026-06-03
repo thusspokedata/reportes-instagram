@@ -81,5 +81,13 @@ body {
   font-size: 0.85rem;
   margin: 0 0 0.9rem;
 }
+.medians {
+  font-size: 0.9rem;
+  color: var(--ink);
+  background: #f1f3f9;
+  border-radius: 6px;
+  padding: 0.4rem 0.65rem;
+  margin: 0 0 0.9rem;
+}
 .empty { color: var(--muted); font-size: 0.9rem; margin: 0.3rem 0; }
 .placeholder { border-style: dashed; background: #fafafa; }
