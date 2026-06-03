@@ -1,0 +1,22 @@
+version: 2
+updates:
+  # Dependencias Python (requirements.txt). Agrupadas en un solo PR semanal
+  # para no fragmentar.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      python-deps:
+        patterns:
+          - "*"
+
+  # Actions usadas por workflows (ej. CodeQL).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
