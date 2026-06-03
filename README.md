@@ -20,6 +20,24 @@ Rutas del blueprint `auth`:
 
 Los access tokens se guardan **cifrados** en SQLite (Fernet), nunca en claro.
 
+## Bajada de insights
+
+Tras loguearte, podés bajar insights de la Instagram Graph API a mano:
+
+```bash
+flask init-db          # crea/actualiza tablas (account_snapshots, post_metrics)
+flask fetch-insights   # baja y persiste insights de cada usuaria guardada
+```
+
+- `account_snapshots`: un snapshot por día por usuaria (alimenta gráficos de
+  evolución). Correrlo dos veces el mismo día actualiza, no duplica.
+- `post_metrics`: métricas por post (upsert por `media_id`).
+
+La bajada es **defensiva**: si una métrica falla o Meta la rechaza, se saltea y
+sigue con las demás. Las métricas ausentes quedan en `NULL` (nunca 0). El token
+se descifra sólo para la llamada y nunca se loguea. La automatización por cron
+llega en una fase posterior.
+
 ## Requisitos
 
 - Python 3.9+
