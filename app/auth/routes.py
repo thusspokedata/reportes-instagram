@@ -100,8 +100,7 @@ def callback():
     session["user_id"] = user_id
     session["logged_in"] = True
 
-    # Dashboard no existe todavía: por ahora vamos a /health.
-    return redirect(url_for("main.health"))
+    return redirect(url_for("dashboard.dashboard"))
 
 
 @bp.route("/logout")

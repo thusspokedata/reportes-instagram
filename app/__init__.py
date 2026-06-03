@@ -13,6 +13,7 @@ from . import db
 from . import insights
 from .auth.routes import bp as auth_bp
 from .config import Config
+from .routes.dashboard import bp as dashboard_bp
 from .routes.main import bp as main_bp
 
 
@@ -58,8 +59,9 @@ def create_app():
     # `flask fetch-insights` command.
     insights.init_app(app)
 
-    # Blueprints. Add `dashboard` here in a later spec.
+    # Blueprints.
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)
+    app.register_blueprint(dashboard_bp)
 
     return app
