@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}Reportes La Huella{% endblock %}</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/dashboard.css') }}"
+    />
+    <!-- Chart.js: versión pineada + Subresource Integrity (SRI) -->
+    <script
+      src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"
+      integrity="sha384-Sse/HDqcypGpyTDpvZOJNnG0TT3feGQUkF9H+mnRvic+LjR+K1NhTt8f51KIQ3v3"
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    ></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Reportes <span>La Huella</span></h1>
+      {% block headeractions %}{% endblock %}
+    </header>
+    <main class="container">{% block content %}{% endblock %}</main>
+    {% block scripts %}{% endblock %}
+  </body>
+</html>

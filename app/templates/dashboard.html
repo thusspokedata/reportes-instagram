@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Reportes La Huella{% endblock %}
+
+{% block headeractions %}
+  <a class="logout" href="{{ url_for('auth.logout') }}">Cerrar sesión</a>
+{% endblock %}
+
+{% block content %}
+  {# ---- Resumen de cuenta (tarjetas). NULL -> "sin dato", nunca 0. ---- #}
+  <section class="cards" aria-label="Resumen de cuenta">
+    <div class="card">
+      <span class="card-label">Seguidores</span>
+      <span class="card-value">
+        {%- if data.summary.followers is not none -%}
+          {{ data.summary.followers }}
+        {%- else -%}<span class="nodata">sin dato</span>{%- endif -%}
+      </span>
+    </div>
+    <div class="card">
+      <span class="card-label">Reach del día</span>
+      <span class="card-value">
+        {%- if data.summary.reach is not none -%}
+          {{ data.summary.reach }}
+        {%- else -%}<span class="nodata">sin dato</span>{%- endif -%}
+      </span>
+    </div>
+    <div class="card">
+      <span class="card-label">Posts</span>
+      <span class="card-value">{{ data.summary.posts }}</span>
+    </div>
+  </section>
+
+  {# ---- Gráficos con datos reales HOY ---- #}
+  <section class="panel">
+    <h2>Engagement por post</h2>
+    <p class="note">Likes y comentarios por publicación. Los posts sin una
+      métrica no se grafican como 0 (quedan vacíos).</p>
+    {% if data.engagement %}
+      <p class="medians">
+        Medianas (no promedios) —
+        likes:
+        {%- if data.medians.likes is not none %} {{ data.medians.likes }}
+        {%- else %} <span class="nodata">sin dato</span>{% endif %};
+        comentarios:
+        {%- if data.medians.comments is not none %} {{ data.medians.comments }}
+        {%- else %} <span class="nodata">sin dato</span>{% endif %};
+        reach:
+        {%- if data.medians.reach is not none %} {{ data.medians.reach }}
+        {%- else %} <span class="nodata">sin dato</span>{% endif %}.
+      </p>
+      <canvas id="chart-engagement" height="120"></canvas>
+    {% else %}
+      <p class="empty">Todavía no hay posts en la base.</p>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <h2>Reach por post</h2>
+    {% if data.engagement %}
+      <canvas id="chart-reach" height="120"></canvas>
+    {% else %}
+      <p class="empty">Todavía no hay posts en la base.</p>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <h2>Reach mediano por tipo de media</h2>
+    {% if not data.enough_sample %}
+      <p class="caution">⚠ Muestra chica, no concluyente (N&lt;{{ data.min_sample }}).
+        Descriptivo, no es una recomendación.</p>
+    {% endif %}
+    {% if data.reach_by_type %}
+      <canvas id="chart-reach-type" height="120"></canvas>
+    {% else %}
+      <p class="empty">Sin datos por tipo todavía.</p>
+    {% endif %}
+  </section>
+
+  {# ---- Gráficos estructurados, aún sin datos suficientes ---- #}
+  <section class="panel placeholder">
+    <h2>Crecimiento de seguidores</h2>
+    <p class="empty">Se completará a medida que se acumulen snapshots diarios
+      (requiere el cron de la Fase 3). No se dibuja una línea de un solo punto.</p>
+  </section>
+
+  <section class="panel placeholder">
+    <h2>Reach / vistas por día</h2>
+    <p class="empty">Se completará a medida que se acumulen snapshots diarios
+      (requiere el cron de la Fase 3).</p>
+  </section>
+
+  <section class="panel placeholder">
+    <h2>Mejor día / horario para publicar</h2>
+    <p class="empty">
+      Análisis pendiente (se implementa en una fase posterior).
+      {% if not data.enough_sample %}
+        Además requiere al menos {{ data.min_sample }} posts; hoy tenés
+        {{ data.summary.posts }}.
+      {% endif %}
+    </p>
+  </section>
+
+  {# Datos calculados en backend, serializados de forma segura para Chart.js. #}
+  <script id="dashboard-data" type="application/json">{{ data | tojson }}</script>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}
