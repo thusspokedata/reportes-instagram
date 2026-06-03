@@ -95,7 +95,7 @@ def dashboard():
 
     db = get_db()
     snapshot = db.execute(
-        "SELECT follower_count, reach, views, snapshot_date FROM account_snapshots"
+        "SELECT follower_count, reach FROM account_snapshots"
         " WHERE user_id = ? ORDER BY snapshot_date DESC LIMIT 1",
         (user_id,),
     ).fetchone()
