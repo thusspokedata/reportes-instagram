@@ -6,8 +6,9 @@ Pequeña web app privada para ver métricas de Instagram Business.
 server-side, Chart.js. OAuth vía Facebook Login y datos vía Instagram Graph
 API (versión configurable, ver `GRAPH_API_VERSION`).
 
-> Estado: scaffolding (SPEC 01) + login OAuth con Facebook (SPEC 02). La
-> bajada de datos / métricas llega en specs posteriores.
+> Estado: scaffolding (SPEC 01) + login OAuth con Facebook (SPEC 02) + bajada
+> de insights a SQLite (SPEC 03). Los gráficos / dashboard y la automatización
+> por cron llegan en specs posteriores.
 
 ## Login (OAuth)
 
@@ -19,6 +20,24 @@ Rutas del blueprint `auth`:
 - `GET /auth/logout` — cierra la sesión.
 
 Los access tokens se guardan **cifrados** en SQLite (Fernet), nunca en claro.
+
+## Bajada de insights
+
+Tras loguearte, podés bajar insights de la Instagram Graph API a mano:
+
+```bash
+flask init-db          # crea/actualiza tablas (account_snapshots, post_metrics)
+flask fetch-insights   # baja y persiste insights de cada usuaria guardada
+```
+
+- `account_snapshots`: un snapshot por día por usuaria (alimenta gráficos de
+  evolución). Correrlo dos veces el mismo día actualiza, no duplica.
+- `post_metrics`: métricas por post (upsert por `media_id`).
+
+La bajada es **defensiva**: si una métrica falla o Meta la rechaza, se saltea y
+sigue con las demás. Las métricas ausentes quedan en `NULL` (nunca 0). El token
+se descifra sólo para la llamada y nunca se loguea. La automatización por cron
+llega en una fase posterior.
 
 ## Requisitos
 

@@ -10,6 +10,7 @@ from cryptography.fernet import Fernet
 from flask import Flask
 
 from . import db
+from . import insights
 from .auth.routes import bp as auth_bp
 from .config import Config
 from .routes.main import bp as main_bp
@@ -53,6 +54,9 @@ def create_app():
 
     # DB teardown + `flask init-db` command.
     db.init_app(app)
+
+    # `flask fetch-insights` command.
+    insights.init_app(app)
 
     # Blueprints. Add `dashboard` here in a later spec.
     app.register_blueprint(main_bp)
