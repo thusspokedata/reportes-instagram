@@ -78,6 +78,27 @@ def test_fetch_insights_snapshot_follower_count_null_when_profile_empty(
     assert snap["follower_count"] is None  # NULL, nunca 0
 
 
+def test_fetch_insights_warns_on_media_count_discrepancy(
+    user_factory, inited_app, monkeypatch
+):
+    user_factory()
+    monkeypatch.setattr(fetch, "resolve_ig_account", lambda u: "IG1")
+    # El perfil dice 13 posts pero sólo bajamos 1 -> debe avisar.
+    monkeypatch.setattr(
+        fetch, "fetch_profile", lambda u, ig_id=None: {"followers_count": 147, "media_count": 13}
+    )
+    monkeypatch.setattr(fetch, "fetch_account_insights", lambda u, ig_id=None: {"reach": 1})
+    monkeypatch.setattr(
+        fetch, "fetch_media_list", lambda u, ig_id=None: [{"id": "M1"}]
+    )
+    monkeypatch.setattr(fetch, "fetch_media_insights", lambda u, mid, mt=None: {"reach": 1})
+
+    result = inited_app.test_cli_runner().invoke(args=["fetch-insights"])
+
+    assert result.exit_code == 0
+    assert "13" in result.output and "media_count" in result.output
+
+
 def test_fetch_insights_command_aborts_on_rate_limit(user_factory, inited_app, monkeypatch):
     user_factory()
 

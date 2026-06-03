@@ -154,6 +154,48 @@ def test_media_list_paginates_following_cursor(app_ctx, monkeypatch):
     assert ids == ["M1", "M2", "M3"]  # trae las dos páginas, sin duplicar
 
 
+def test_media_list_parses_after_from_next_url_when_cursor_missing(app_ctx, monkeypatch):
+    # Meta a veces da paging.next (URL) sin exponer cursors.after.
+    def fake(path, params, token):
+        if path == "me/accounts":
+            return {"data": [{"instagram_business_account": {"id": "IG1"}}]}
+        if params.get("after") is None:
+            return {
+                "data": [{"id": "M1"}],
+                "paging": {"next": "https://graph.facebook.com/v23.0/IG1/media?after=CURX"},
+            }
+        assert params.get("after") == "CURX"
+        return {"data": [{"id": "M2"}], "paging": {}}
+
+    monkeypatch.setattr(fetch, "_graph_get", fake)
+
+    media = fetch.fetch_media_list(_user(), ig_id="IG1")
+
+    assert [m["id"] for m in media] == ["M1", "M2"]
+
+
+def test_media_list_respects_page_cap(app_ctx, monkeypatch):
+    counter = {"n": 0}
+
+    def fake(path, params, token):
+        if path == "me/accounts":
+            return {"data": [{"instagram_business_account": {"id": "IG1"}}]}
+        counter["n"] += 1
+        n = counter["n"]
+        # Siempre hay "más" -> sólo el tope debe cortar el loop.
+        return {
+            "data": [{"id": f"M{n}"}],
+            "paging": {"next": "http://n", "cursors": {"after": f"C{n}"}},
+        }
+
+    monkeypatch.setattr(fetch, "_graph_get", fake)
+
+    media = fetch.fetch_media_list(_user(), ig_id="IG1")
+
+    # Corta en el tope, no entra en loop infinito.
+    assert len(media) == fetch._MAX_MEDIA_PAGES
+
+
 def test_rate_limit_propagates_not_swallowed(app_ctx, monkeypatch):
     def fake(path, params, token):
         if path == "me/accounts":

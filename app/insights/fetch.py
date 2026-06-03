@@ -11,6 +11,7 @@ loguea ni se incluye en mensajes de error.
 
 import logging
 from typing import Optional
+from urllib.parse import parse_qs, urlparse
 
 import requests
 from flask import current_app
@@ -164,6 +165,13 @@ def fetch_account_insights(user, ig_id=None) -> dict:
     return result
 
 
+def _after_from_url(url) -> Optional[str]:
+    """Extrae el cursor `after` de una URL de paginación de Meta."""
+    if not isinstance(url, str):
+        return None
+    return parse_qs(urlparse(url).query).get("after", [None])[0]
+
+
 def fetch_media_list(user, ig_id=None) -> list:
     """Trae la lista de media de la usuaria (con like_count/comments_count).
 
@@ -187,6 +195,10 @@ def fetch_media_list(user, ig_id=None) -> list:
         cursor = None
         if isinstance(paging, dict) and paging.get("next"):
             cursor = (paging.get("cursors") or {}).get("after")
+            # Fallback: si vino `next` (URL) pero no expuso el cursor, sacarlo
+            # de la query de la URL `next`.
+            if not cursor:
+                cursor = _after_from_url(paging["next"])
         if not cursor:
             break
         params = {"fields": MEDIA_FIELDS, "limit": 100, "after": cursor}
