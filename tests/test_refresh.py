@@ -95,6 +95,40 @@ def test_refresh_error_does_not_break(ctx, monkeypatch):
     assert result["status"] == "error"
 
 
+def test_unknown_expiry_does_not_refresh(ctx, monkeypatch):
+    user = _make_user(expira=None, actualizado=NOW - timedelta(days=50))
+    monkeypatch.setattr(facebook, "refresh_long_lived_token", _no_call)
+
+    result = refresh.refresh_token_if_needed(user, now=NOW)
+
+    assert result["status"] == "unknown_expiry"
+
+
+def test_unknown_age_allows_refresh(ctx, monkeypatch):
+    # Sin actualizado_en no se puede medir antigüedad -> se permite intentar el
+    # refresh (peor caso: Meta lo rechaza y cae en 'error', manejado).
+    user = _make_user(expira=NOW + timedelta(days=10), actualizado=None)
+    monkeypatch.setattr(
+        facebook, "refresh_long_lived_token", lambda tok: ("newtok", 5184000)
+    )
+
+    result = refresh.refresh_token_if_needed(user, now=NOW)
+
+    assert result["status"] == "refreshed"
+
+
+def test_refresh_tokens_command_runs(ctx, monkeypatch):
+    # Usuaria con token sin fecha de expiración -> unknown_expiry; el comando
+    # corre, no rompe, y emite el estado por usuaria.
+    upsert_user("fbcmd", "N", encrypt_token("tok"), None)
+    monkeypatch.setattr(facebook, "refresh_long_lived_token", _no_call)
+
+    result = ctx.test_cli_runner().invoke(args=["refresh-tokens"])
+
+    assert result.exit_code == 0
+    assert "unknown_expiry" in result.output
+
+
 def test_token_never_logged(ctx, monkeypatch, caplog):
     user = _make_user(
         expira=NOW + timedelta(days=5),
