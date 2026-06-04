@@ -111,6 +111,27 @@ def exchange_for_long_lived_token(short_token: str):
     return token, data.get("expires_in")
 
 
+def refresh_long_lived_token(long_token: str):
+    """Renueva un token largo de **Facebook Login** re-intercambiándolo.
+
+    Mecanismo: el MISMO endpoint del intercambio inicial,
+    ``graph.facebook.com/{version}/oauth/access_token`` con
+    ``grant_type=fb_exchange_token``, pasando el token largo actual como
+    ``fb_exchange_token``. Es el camino de Facebook Login — NO
+    ``graph.instagram.com/refresh_access_token``, que es de Instagram Login.
+
+    Devuelve ``(token_nuevo, expires_in)``; el caller fija el nuevo vencimiento
+    con el ``expires_in`` que devuelve Meta.
+
+    NOTA (sin verificar contra la doc vigente — entorno sin acceso a red): no se
+    pudo confirmar si este re-intercambio EXTIENDE ~60 días o conserva el
+    vencimiento original. Por eso el caller usa el ``expires_in`` real devuelto
+    y el manejo de "token expirado -> requiere re-login" cubre el peor caso.
+    Confirmar empíricamente en el primer refresh real.
+    """
+    return exchange_for_long_lived_token(long_token)
+
+
 def get_user_profile(access_token: str) -> dict:
     """Fetch the authenticated user's basic profile (id, name)."""
     data = _get_json(

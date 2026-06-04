@@ -85,6 +85,26 @@ def upsert_user(fb_user_id, nombre, access_token_cifrado, token_expira_en):
     return row["id"]
 
 
+def update_user_token(user_id, access_token_cifrado, token_expira_en):
+    """Actualiza el token (ya cifrado) y su vencimiento de una usuaria.
+
+    Usado por el refresh: ``access_token_cifrado`` ya viene cifrado por el
+    caller; esta función nunca ve el token en claro.
+    """
+    db = get_db()
+    db.execute(
+        """
+        UPDATE usuarias
+        SET access_token_cifrado = ?,
+            token_expira_en = ?,
+            actualizado_en = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        (access_token_cifrado, token_expira_en, user_id),
+    )
+    db.commit()
+
+
 @click.command("init-db")
 @with_appcontext
 def init_db_command():

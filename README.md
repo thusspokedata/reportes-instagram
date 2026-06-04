@@ -36,8 +36,40 @@ flask fetch-insights   # baja y persiste insights de cada usuaria guardada
 
 La bajada es **defensiva**: si una métrica falla o Meta la rechaza, se saltea y
 sigue con las demás. Las métricas ausentes quedan en `NULL` (nunca 0). El token
-se descifra sólo para la llamada y nunca se loguea. La automatización por cron
-llega en una fase posterior.
+se descifra sólo para la llamada y nunca se loguea.
+
+## Mantenimiento (renovación de token + snapshot diario)
+
+Dos comandos mantienen la app viva en el tiempo:
+
+```bash
+flask refresh-tokens   # renueva el token largo si está cerca de vencer (cond.)
+flask daily-snapshot   # snapshot diario liviano de cuenta (sin re-bajar posts)
+```
+
+- `refresh-tokens`: refresca el token de Facebook Login **sólo** si le quedan
+  ≤15 días para vencer y tiene ≥24h de antigüedad; guarda el nuevo cifrado con
+  su nuevo vencimiento. Es **condicional e idempotente** → correrlo a diario es
+  seguro. Si el token ya venció, devuelve el `status` `expired_relogin` (es un
+  valor de retorno de runtime que indica que hay que rehacer el login OAuth; no
+  se persiste ningún flag en la DB). **Importante:** un token largo que pasa 60
+  días sin refrescarse
+  expira y ya no se puede renovar — por eso conviene el cron diario.
+- `daily-snapshot`: graba el snapshot de cuenta del día (seguidores + reach),
+  idempotente por día. Liviano: no re-baja los posts (eso es `fetch-insights`).
+
+### Cron recomendado (configurar en el deploy — Fase 2, NO ahora)
+
+En el VPS, una vez deployado, agregar al crontab (orden: primero renovar el
+token, después tomar el snapshot). Ejemplo (diario 06:00, ajustar rutas):
+
+```cron
+# m h  dom mon dow   command
+# 0 6  *   *   *     cd /ruta/app && /ruta/.venv/bin/flask refresh-tokens >> /var/log/reportes/refresh.log 2>&1
+# 5 6  *   *   *     cd /ruta/app && /ruta/.venv/bin/flask daily-snapshot  >> /var/log/reportes/snapshot.log 2>&1
+```
+
+(Líneas comentadas a propósito: el cron se enchufa al deployar, no en desarrollo.)
 
 ## Requisitos
 

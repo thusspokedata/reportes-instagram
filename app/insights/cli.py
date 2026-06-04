@@ -1,8 +1,13 @@
-"""Comando CLI ``flask fetch-insights``.
+"""Comandos CLI de insights.
 
-Punto de entrada manual para probar la bajada ahora; la automatización por cron
-es otra spec (Fase 3). Baja, de forma defensiva, los insights de cada usuaria
-guardada y los persiste en ``account_snapshots`` y ``post_metrics``.
+- ``flask fetch-insights``: bajada COMPLETA (snapshot de cuenta + métricas de
+  todos los posts). Más pesada; correr cuando se quieran refrescar los posts.
+- ``flask daily-snapshot``: solo el snapshot de cuenta del día (liviano, sin
+  re-bajar posts). Pensado para el cron diario — junta la serie de evolución
+  sin gastar el rate limit (~200/h) en posts que no cambian a diario.
+
+Ambos son defensivos y el snapshot es idempotente por día
+(upsert por ``(user_id, snapshot_date)``).
 """
 
 import click
@@ -12,6 +17,20 @@ from . import fetch
 from .fetch import InsightsError, RateLimitError
 from .store import save_account_snapshot, save_post_metrics
 from ..db import get_db
+
+
+def _capture_account_snapshot(user, ig_id):
+    """Baja seguidores (perfil) + insights de cuenta y guarda el snapshot del día.
+
+    Idempotente por ``(user_id, snapshot_date)``. Devuelve el perfil (para
+    validar media_count en la bajada completa). Compartido por ambos comandos.
+    """
+    profile = fetch.fetch_profile(user, ig_id)
+    account = fetch.fetch_account_insights(user, ig_id)
+    # Seguidores del perfil (no de la métrica de insights, que es un delta).
+    account["follower_count"] = profile.get("followers_count")
+    save_account_snapshot(user, account)
+    return profile
 
 
 @click.command("fetch-insights")
@@ -26,13 +45,7 @@ def fetch_insights_command():
         try:
             # Resolver la cuenta IG una sola vez por usuaria (rate limit).
             ig_id = fetch.resolve_ig_account(user)
-
-            # Conteo actual de seguidores: del perfil (no de la métrica de
-            # insights, que es un delta y devuelve vacío -> None, no 0).
-            profile = fetch.fetch_profile(user, ig_id)
-            account = fetch.fetch_account_insights(user, ig_id)
-            account["follower_count"] = profile.get("followers_count")
-            save_account_snapshot(user, account)
+            profile = _capture_account_snapshot(user, ig_id)
 
             posts = []
             for media in fetch.fetch_media_list(user, ig_id):
@@ -63,5 +76,30 @@ def fetch_insights_command():
             click.echo(f"Falló la bajada para la usuaria {user['id']}: {exc}")
 
 
+@click.command("daily-snapshot")
+@with_appcontext
+def daily_snapshot_command():
+    """Snapshot diario liviano: solo métricas de cuenta (sin posts)."""
+    users = get_db().execute("SELECT * FROM usuarias").fetchall()
+    if not users:
+        click.echo("No hay usuarias en la base.")
+        return
+
+    for user in users:
+        try:
+            ig_id = fetch.resolve_ig_account(user)
+            profile = _capture_account_snapshot(user, ig_id)
+            click.echo(
+                f"OK snapshot usuaria {user['id']}: "
+                f"followers={profile.get('followers_count')}"
+            )
+        except RateLimitError:
+            click.echo("Límite de solicitudes de Meta alcanzado; abortando.")
+            break
+        except InsightsError as exc:
+            click.echo(f"Falló el snapshot para la usuaria {user['id']}: {exc}")
+
+
 def init_app(app):
     app.cli.add_command(fetch_insights_command)
+    app.cli.add_command(daily_snapshot_command)
