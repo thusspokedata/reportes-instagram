@@ -1,0 +1,47 @@
+# Ejemplo de server block para reportes.lahuelladelcaminante.de.
+# Sigue el patrón de los otros subdominios del server: proxy a un puerto local
+# de gunicorn + SSL gestionado por certbot.
+#
+# Pasos:
+#   1. Copiar a /etc/nginx/sites-available/reportes
+#   2. ln -s /etc/nginx/sites-available/reportes /etc/nginx/sites-enabled/
+#   3. nginx -t  (validar; NO tocar los otros sitios)
+#   4. systemctl reload nginx
+#   5. certbot --nginx -d reportes.lahuelladelcaminante.de
+#      (certbot completa/activa las líneas de ssl_certificate)
+
+server {
+    server_name reportes.lahuelladelcaminante.de;
+
+    # Headers de seguridad.
+    add_header X-Frame-Options SAMEORIGIN always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+    }
+
+    listen 443 ssl;  # managed by Certbot
+    # ssl_certificate     /etc/letsencrypt/live/reportes.lahuelladelcaminante.de/fullchain.pem;  # managed by Certbot
+    # ssl_certificate_key /etc/letsencrypt/live/reportes.lahuelladelcaminante.de/privkey.pem;    # managed by Certbot
+    # include /etc/letsencrypt/options-ssl-nginx.conf;  # managed by Certbot
+    # ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;    # managed by Certbot
+}
+
+# Redirect http -> https.
+server {
+    if ($host = reportes.lahuelladelcaminante.de) {
+        return 301 https://$host$request_uri;
+    }
+    listen 80;
+    server_name reportes.lahuelladelcaminante.de;
+    return 404;
+}
