@@ -4,8 +4,9 @@ from app import create_app
 
 
 def test_proxyfix_honors_forwarded_proto_and_host(env):
-    """Detrás de nginx, los headers X-Forwarded-* deben hacer que la app genere
-    URLs https con el host público (si no, el redirect_uri del OAuth se rompe)."""
+    """Detrás de nginx, los headers X-Forwarded-* deben hacer que request.scheme/
+    host reflejen la request pública HTTPS (cookies Secure, request.is_secure,
+    url_for(_external=True))."""
     app = create_app()
     app.add_url_rule("/__proxytest", "proxytest", lambda: url_for("proxytest", _external=True))
     client = app.test_client()

@@ -75,8 +75,12 @@ sudo certbot --nginx -d reportes.lahuelladelcaminante.de
 certbot emite el cert y completa el SSL. Renovación automática (ya configurada).
 
 ## 7. Cron (S — enchufar la lógica de la app)
-La app trae los comandos (ver README, sección *Mantenimiento*). Agregar al
-crontab del **usuario del servicio** (orden: refresh → snapshot):
+La app trae los comandos (ver README, sección *Mantenimiento*). Primero crear el
+directorio de logs (si no, el cron falla al redirigir la salida):
+```bash
+sudo mkdir -p /var/log/reportes && sudo chown <usuario-de-servicio> /var/log/reportes
+```
+Agregar al crontab del **usuario del servicio** (orden: refresh → snapshot):
 ```cron
 0 6 * * *  cd /opt/reportes-instagram && /opt/reportes-instagram/.venv/bin/flask refresh-tokens >> /var/log/reportes/refresh.log 2>&1
 5 6 * * *  cd /opt/reportes-instagram && /opt/reportes-instagram/.venv/bin/flask daily-snapshot  >> /var/log/reportes/snapshot.log 2>&1
