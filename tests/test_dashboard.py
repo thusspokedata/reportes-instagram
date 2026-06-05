@@ -4,7 +4,12 @@ from app.routes.dashboard import (
     _median,
     _reach_by_media_type,
     build_dashboard_data,
+    build_demographics,
 )
+
+
+def _drow(breakdown, bucket, value):
+    return {"breakdown": breakdown, "bucket": bucket, "value": value}
 
 
 def _post(media_id="M1", media_type="IMAGE", likes=0, comments=0, reach=0, timestamp=None):
@@ -139,3 +144,68 @@ def test_dashboard_does_not_leak_other_users_data(user_factory, inited_app):
     # No se filtran datos de otra usuaria.
     assert b"SECRETMEDIAB" not in response.data
     assert b"999" not in response.data
+
+
+# --- demografía ----------------------------------------------------------
+
+def test_build_demographics_none_when_empty():
+    assert build_demographics([]) is None
+
+
+def test_build_demographics_gender_mapped_and_sorted():
+    rows = [_drow("gender", "M", 36), _drow("gender", "F", 39), _drow("gender", "U", 16)]
+    demo = build_demographics(rows)
+    # F primero (desc por value) y etiquetas legibles.
+    assert demo["gender"][0] == {"label": "Femenino", "value": 39}
+    assert [g["label"] for g in demo["gender"]] == [
+        "Femenino", "Masculino", "Desconocido"
+    ]
+
+
+def test_build_demographics_country_top_n_groups_rest():
+    rows = [_drow("country", f"C{i}", 20 - i) for i in range(12)]  # 12 países
+    demo = build_demographics(rows)
+    assert len(demo["country"]) == 9  # top 8 + "Otros"
+    assert demo["country"][-1]["label"] == "Otros"
+    assert demo["country"][-1]["value"] == sum(20 - i for i in range(8, 12))
+
+
+def test_build_demographics_age_sorted():
+    rows = [
+        _drow("age", "25-34", 31),
+        _drow("age", "18-24", 2),
+        _drow("age", "45-54", 19),
+    ]
+    demo = build_demographics(rows)
+    assert [a["label"] for a in demo["age"]] == ["18-24", "25-34", "45-54"]
+
+
+def test_dashboard_renders_demographics_when_present(user_factory, inited_app):
+    user = user_factory()
+    with inited_app.app_context():
+        db = get_db()
+        db.execute(
+            "INSERT INTO audience_demographics (user_id, breakdown, bucket, value)"
+            " VALUES (?, ?, ?, ?)",
+            (user["id"], "gender", "F", 39),
+        )
+        db.commit()
+    client = inited_app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = user["id"]
+        sess["logged_in"] = True
+
+    response = client.get("/dashboard")
+
+    assert response.status_code == 200
+    assert b"chart-demo-gender" in response.data
+
+
+def test_build_demographics_otros_is_none_when_rest_all_none():
+    # Top con valores; el resto todo None -> "Otros" debe ser None (no 0).
+    rows = [_drow("country", f"C{i}", 20 - i) for i in range(8)]
+    rows += [_drow("country", f"X{j}", None) for j in range(3)]
+    demo = build_demographics(rows)
+    otros = [c for c in demo["country"] if c["label"] == "Otros"]
+    assert len(otros) == 1
+    assert otros[0]["value"] is None  # null, nunca 0

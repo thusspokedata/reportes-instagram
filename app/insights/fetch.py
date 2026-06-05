@@ -34,6 +34,8 @@ ACCOUNT_METRICS = (
 )
 # Fields del perfil del IG user (conteos actuales, en tiempo real).
 PROFILE_FIELDS = "followers_count,media_count,username"
+# Cortes de demografía de audiencia (insight follower_demographics, ≥100 seg.).
+DEMOGRAPHICS_BREAKDOWNS = ("gender", "age", "country", "city")
 # Métricas de POST que se piden como insights. likes/comments NO van acá:
 # se leen como fields del media object (like_count, comments_count).
 MEDIA_INSIGHT_METRICS = ("reach",)
@@ -140,6 +142,65 @@ def fetch_profile(user, ig_id=None) -> dict:
         "media_count": data.get("media_count"),
         "username": data.get("username"),
     }
+
+
+def _extract_demographics(data) -> dict:
+    """Parsea la respuesta de follower_demographics -> {bucket: value}.
+
+    Forma real (verificada): data[0].total_value.breakdowns[0].results[], cada
+    result = {dimension_values: [bucket], value: n}. Defensivo ante estructuras
+    inesperadas (-> {})."""
+    items = data.get("data") if isinstance(data, dict) else None
+    if not isinstance(items, list) or not items:
+        return {}
+    total_value = items[0].get("total_value") if isinstance(items[0], dict) else None
+    if not isinstance(total_value, dict):
+        return {}
+    breakdowns = total_value.get("breakdowns")
+    if not isinstance(breakdowns, list) or not breakdowns:
+        return {}
+    results = breakdowns[0].get("results") if isinstance(breakdowns[0], dict) else None
+    if not isinstance(results, list):
+        return {}
+    out = {}
+    for r in results:
+        if not isinstance(r, dict):
+            continue
+        dv = r.get("dimension_values")
+        if isinstance(dv, list) and dv:
+            out[str(dv[0])] = r.get("value")
+    return out
+
+
+def fetch_demographics(user, ig_id=None) -> dict:
+    """Baja, de forma defensiva, la demografía AGREGADA de la audiencia.
+
+    Devuelve ``{breakdown: {bucket: value}}`` para cada corte. Si un corte falla
+    o Meta no lo devuelve (ej. <100 seguidores), queda ``{}`` y los demás siguen.
+    """
+    token = decrypt_token(user["access_token_cifrado"])
+    if ig_id is None:
+        ig_id = _resolve_ig_user_id(token)
+    result = {}
+    for breakdown in DEMOGRAPHICS_BREAKDOWNS:
+        try:
+            data = _graph_get(
+                f"{ig_id}/insights",
+                {
+                    "metric": "follower_demographics",
+                    "period": "lifetime",
+                    "metric_type": "total_value",
+                    "breakdown": breakdown,
+                },
+                token,
+            )
+            result[breakdown] = _extract_demographics(data)
+        except RateLimitError:
+            raise
+        except (InsightsError, TypeError, AttributeError, KeyError):
+            logger.warning("Demografía '%s' no disponible; se saltea.", breakdown)
+            result[breakdown] = {}
+    return result
 
 
 def fetch_account_insights(user, ig_id=None) -> dict:

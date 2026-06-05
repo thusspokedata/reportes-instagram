@@ -301,6 +301,75 @@ def test_normalize_post_tolerates_non_dict(app_ctx):
     assert fetch.normalize_post("garbage")["likes"] is None
 
 
+# --- demografía ----------------------------------------------------------
+
+def test_extract_demographics_parses_real_shape(app_ctx):
+    data = {
+        "data": [
+            {
+                "name": "follower_demographics",
+                "total_value": {
+                    "breakdowns": [
+                        {
+                            "dimension_keys": ["gender"],
+                            "results": [
+                                {"dimension_values": ["F"], "value": 39},
+                                {"dimension_values": ["M"], "value": 36},
+                            ],
+                        }
+                    ]
+                },
+            }
+        ]
+    }
+    assert fetch._extract_demographics(data) == {"F": 39, "M": 36}
+
+
+def test_extract_demographics_tolerates_garbage(app_ctx):
+    assert fetch._extract_demographics({}) == {}
+    assert fetch._extract_demographics({"data": []}) == {}
+    assert fetch._extract_demographics("nope") == {}
+    assert fetch._extract_demographics({"data": [{"total_value": {}}]}) == {}
+
+
+def test_fetch_demographics_is_defensive(app_ctx, monkeypatch):
+    def fake(path, params, token):
+        if path == "me/accounts":
+            return {"data": [{"instagram_business_account": {"id": "IG1"}}]}
+        bd = params.get("breakdown")
+        if bd == "gender":
+            return {
+                "data": [
+                    {"total_value": {"breakdowns": [{"results": [
+                        {"dimension_values": ["F"], "value": 39}
+                    ]}]}}
+                ]
+            }
+        if bd == "city":
+            raise InsightsError("corte no disponible")
+        return {"data": []}  # age/country vacíos
+
+    monkeypatch.setattr(fetch, "_graph_get", fake)
+
+    res = fetch.fetch_demographics(_user(), ig_id="IG1")
+
+    assert res["gender"] == {"F": 39}
+    assert res["city"] == {}  # un corte caído no rompe los demás
+    assert res["age"] == {} and res["country"] == {}
+
+
+def test_fetch_demographics_propagates_rate_limit(app_ctx, monkeypatch):
+    def fake(path, params, token):
+        if path == "me/accounts":
+            return {"data": [{"instagram_business_account": {"id": "IG1"}}]}
+        raise RateLimitError("rate")
+
+    monkeypatch.setattr(fetch, "_graph_get", fake)
+
+    with pytest.raises(RateLimitError):
+        fetch.fetch_demographics(_user(), ig_id="IG1")
+
+
 def test_graph_get_rate_limit_code(app_ctx, monkeypatch):
     monkeypatch.setattr(
         fetch.requests,

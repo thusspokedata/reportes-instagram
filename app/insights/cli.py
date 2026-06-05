@@ -15,7 +15,7 @@ from flask.cli import with_appcontext
 
 from . import fetch
 from .fetch import InsightsError, RateLimitError
-from .store import save_account_snapshot, save_post_metrics
+from .store import save_account_snapshot, save_demographics, save_post_metrics
 from ..db import get_db
 
 
@@ -100,6 +100,30 @@ def daily_snapshot_command():
             click.echo(f"Falló el snapshot para la usuaria {user['id']}: {exc}")
 
 
+@click.command("fetch-demographics")
+@with_appcontext
+def fetch_demographics_command():
+    """Baja la demografía agregada de la audiencia (género/edad/país/ciudad)."""
+    users = get_db().execute("SELECT * FROM usuarias").fetchall()
+    if not users:
+        click.echo("No hay usuarias en la base.")
+        return
+
+    for user in users:
+        try:
+            ig_id = fetch.resolve_ig_account(user)
+            demographics = fetch.fetch_demographics(user, ig_id)
+            save_demographics(user, demographics)
+            counts = {b: len(v) for b, v in demographics.items()}
+            click.echo(f"OK demografía usuaria {user['id']}: {counts}")
+        except RateLimitError:
+            click.echo("Límite de solicitudes de Meta alcanzado; abortando.")
+            break
+        except InsightsError as exc:
+            click.echo(f"Falló la demografía para la usuaria {user['id']}: {exc}")
+
+
 def init_app(app):
     app.cli.add_command(fetch_insights_command)
     app.cli.add_command(daily_snapshot_command)
+    app.cli.add_command(fetch_demographics_command)

@@ -76,6 +76,37 @@
     {% endif %}
   </section>
 
+  {# ---- Demografía de audiencia (agregada y anónima) ---- #}
+  <section class="panel">
+    <h2>Demografía de audiencia</h2>
+    {% if data.demographics %}
+      <p class="caution">⚠ Datos agregados y anónimos de Meta (~48h de delay).
+        Audiencia chica: tomalo como referencia, no al pie de la letra (a nivel
+        ciudad, varios buckets pueden ser de muy pocos seguidores).</p>
+      <div class="demo-grid">
+        <div>
+          <h3>Género</h3>
+          <canvas id="chart-demo-gender" height="160"></canvas>
+        </div>
+        <div>
+          <h3>Edad</h3>
+          <canvas id="chart-demo-age" height="160"></canvas>
+        </div>
+        <div>
+          <h3>País</h3>
+          <canvas id="chart-demo-country" height="160"></canvas>
+        </div>
+        <div>
+          <h3>Ciudad</h3>
+          <canvas id="chart-demo-city" height="160"></canvas>
+        </div>
+      </div>
+    {% else %}
+      <p class="empty">Sin datos todavía. Corré <code>flask fetch-demographics</code>
+        (requiere ≥100 seguidores; puede tardar hasta 48h en estar disponible).</p>
+    {% endif %}
+  </section>
+
   {# ---- Gráficos estructurados, aún sin datos suficientes ---- #}
   <section class="panel placeholder">
     <h2>Crecimiento de seguidores</h2>

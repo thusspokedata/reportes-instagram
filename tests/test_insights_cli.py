@@ -158,3 +158,38 @@ def test_fetch_insights_command_aborts_on_rate_limit(user_factory, inited_app, m
     # Corta limpio (sin reintentos agresivos) y avisa.
     assert result.exit_code == 0
     assert "Límite de solicitudes" in result.output
+
+
+def test_fetch_demographics_command_persists(user_factory, inited_app, monkeypatch):
+    user = user_factory()
+    monkeypatch.setattr(fetch, "resolve_ig_account", lambda u: "IG1")
+    monkeypatch.setattr(
+        fetch,
+        "fetch_demographics",
+        lambda u, ig_id=None: {"gender": {"F": 39, "M": 36}, "age": {}, "country": {}, "city": {}},
+    )
+
+    result = inited_app.test_cli_runner().invoke(args=["fetch-demographics"])
+
+    assert result.exit_code == 0
+    with inited_app.app_context():
+        n = get_db().execute(
+            "SELECT COUNT(*) c FROM audience_demographics"
+            " WHERE user_id = ? AND breakdown = 'gender'",
+            (user["id"],),
+        ).fetchone()["c"]
+    assert n == 2
+
+
+def test_fetch_demographics_command_aborts_on_rate_limit(user_factory, inited_app, monkeypatch):
+    user_factory()
+
+    def boom(u):
+        raise RateLimitError("rate limited")
+
+    monkeypatch.setattr(fetch, "resolve_ig_account", boom)
+
+    result = inited_app.test_cli_runner().invoke(args=["fetch-demographics"])
+
+    assert result.exit_code == 0
+    assert "Límite de solicitudes" in result.output

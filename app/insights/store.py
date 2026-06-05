@@ -47,6 +47,27 @@ def save_account_snapshot(user, data: dict, snapshot_date=None):
     db.commit()
 
 
+def save_demographics(user, demographics):
+    """Reemplaza la demografía agregada de la usuaria ("foto actual").
+
+    ``demographics`` es ``{breakdown: {bucket: value}}``. Para cada breakdown
+    presente se borran las filas previas y se insertan las nuevas (idempotente).
+    """
+    db = get_db()
+    for breakdown, buckets in demographics.items():
+        db.execute(
+            "DELETE FROM audience_demographics WHERE user_id = ? AND breakdown = ?",
+            (user["id"], breakdown),
+        )
+        for bucket, value in buckets.items():
+            db.execute(
+                "INSERT INTO audience_demographics (user_id, breakdown, bucket, value)"
+                " VALUES (?, ?, ?, ?)",
+                (user["id"], breakdown, bucket, value),
+            )
+    db.commit()
+
+
 def save_post_metrics(user, posts):
     """Upsert de métricas por post (una fila por ``(user_id, media_id)``).
 
