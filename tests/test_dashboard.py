@@ -199,3 +199,13 @@ def test_dashboard_renders_demographics_when_present(user_factory, inited_app):
 
     assert response.status_code == 200
     assert b"chart-demo-gender" in response.data
+
+
+def test_build_demographics_otros_is_none_when_rest_all_none():
+    # Top con valores; el resto todo None -> "Otros" debe ser None (no 0).
+    rows = [_drow("country", f"C{i}", 20 - i) for i in range(8)]
+    rows += [_drow("country", f"X{j}", None) for j in range(3)]
+    demo = build_demographics(rows)
+    otros = [c for c in demo["country"] if c["label"] == "Otros"]
+    assert len(otros) == 1
+    assert otros[0]["value"] is None  # null, nunca 0

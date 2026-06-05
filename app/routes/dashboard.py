@@ -102,8 +102,10 @@ def _top_n(items, n, otros_label):
     out = [{"label": b, "value": v} for b, v in ordered[:n]]
     rest = ordered[n:]
     if rest:
+        rest_values = [v for _, v in rest if v is not None]
+        # null != 0: si el resto no tiene valores reales, "Otros" es sin dato.
         out.append(
-            {"label": otros_label, "value": sum(v for _, v in rest if v is not None)}
+            {"label": otros_label, "value": sum(rest_values) if rest_values else None}
         )
     return out
 
