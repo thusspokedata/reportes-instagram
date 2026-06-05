@@ -179,3 +179,17 @@ def test_fetch_demographics_command_persists(user_factory, inited_app, monkeypat
             (user["id"],),
         ).fetchone()["c"]
     assert n == 2
+
+
+def test_fetch_demographics_command_aborts_on_rate_limit(user_factory, inited_app, monkeypatch):
+    user_factory()
+
+    def boom(u):
+        raise RateLimitError("rate limited")
+
+    monkeypatch.setattr(fetch, "resolve_ig_account", boom)
+
+    result = inited_app.test_cli_runner().invoke(args=["fetch-demographics"])
+
+    assert result.exit_code == 0
+    assert "Límite de solicitudes" in result.output

@@ -358,6 +358,18 @@ def test_fetch_demographics_is_defensive(app_ctx, monkeypatch):
     assert res["age"] == {} and res["country"] == {}
 
 
+def test_fetch_demographics_propagates_rate_limit(app_ctx, monkeypatch):
+    def fake(path, params, token):
+        if path == "me/accounts":
+            return {"data": [{"instagram_business_account": {"id": "IG1"}}]}
+        raise RateLimitError("rate")
+
+    monkeypatch.setattr(fetch, "_graph_get", fake)
+
+    with pytest.raises(RateLimitError):
+        fetch.fetch_demographics(_user(), ig_id="IG1")
+
+
 def test_graph_get_rate_limit_code(app_ctx, monkeypatch):
     monkeypatch.setattr(
         fetch.requests,
