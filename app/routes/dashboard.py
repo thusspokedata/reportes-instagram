@@ -22,6 +22,11 @@ bp = Blueprint("dashboard", __name__)
 # Muestra mínima para conclusiones (horarios, recomendación por tipo, etc.).
 MIN_SAMPLE = 12
 
+# Demografía: etiquetas legibles y top-N por corte (resto agrupado).
+GENDER_LABELS = {"F": "Femenino", "M": "Masculino", "U": "Desconocido"}
+TOP_COUNTRIES = 8
+TOP_CITIES = 10
+
 
 def _median(values):
     """Mediana ignorando NULL (None). Devuelve None si no hay datos reales."""
@@ -86,6 +91,47 @@ def build_dashboard_data(snapshot, posts):
     }
 
 
+def _sorted_desc(items):
+    """Ordena (bucket, value) por value desc; None al final."""
+    return sorted(items, key=lambda kv: (kv[1] is None, -(kv[1] or 0)))
+
+
+def _top_n(items, n, otros_label):
+    """Top-N por value; el resto se agrupa en una sola barra etiquetada."""
+    ordered = _sorted_desc(items)
+    out = [{"label": b, "value": v} for b, v in ordered[:n]]
+    rest = ordered[n:]
+    if rest:
+        out.append(
+            {"label": otros_label, "value": sum(v for _, v in rest if v is not None)}
+        )
+    return out
+
+
+def build_demographics(rows):
+    """Arma la demografía para el template. None si todavía no hay datos.
+
+    Agregada y anónima; país/ciudad con top-N + 'Otros' (sin recorte silencioso).
+    """
+    if not rows:
+        return None
+    by = {}
+    for r in rows:
+        by.setdefault(r["breakdown"], []).append((r["bucket"], r["value"]))
+    return {
+        "gender": [
+            {"label": GENDER_LABELS.get(b, b), "value": v}
+            for b, v in _sorted_desc(by.get("gender", []))
+        ],
+        # Los rangos etarios ("13-17".."65+") ordenan bien lexicográficamente.
+        "age": [
+            {"label": b, "value": v} for b, v in sorted(by.get("age", []))
+        ],
+        "country": _top_n(by.get("country", []), TOP_COUNTRIES, "Otros"),
+        "city": _top_n(by.get("city", []), TOP_CITIES, "Otras"),
+    }
+
+
 @bp.route("/dashboard")
 def dashboard():
     """Página del dashboard. Requiere sesión iniciada."""
@@ -107,5 +153,11 @@ def dashboard():
         (user_id,),
     ).fetchall()
 
+    demo_rows = db.execute(
+        "SELECT breakdown, bucket, value FROM audience_demographics WHERE user_id = ?",
+        (user_id,),
+    ).fetchall()
+
     data = build_dashboard_data(snapshot, posts)
+    data["demographics"] = build_demographics(demo_rows)
     return render_template("dashboard.html", data=data)

@@ -26,9 +26,14 @@ Los access tokens se guardan **cifrados** en SQLite (Fernet), nunca en claro.
 Tras loguearte, podés bajar insights de la Instagram Graph API a mano:
 
 ```bash
-flask init-db          # crea/actualiza tablas (account_snapshots, post_metrics)
-flask fetch-insights   # baja y persiste insights de cada usuaria guardada
+flask init-db            # crea/actualiza tablas (account_snapshots, post_metrics, audience_demographics)
+flask fetch-insights     # baja y persiste insights (snapshot de cuenta + posts)
+flask fetch-demographics # demografía agregada de audiencia (género/edad/país/ciudad, ≥100 seg.)
 ```
+
+`fetch-demographics` es "foto actual" (reemplaza en cada bajada). Los datos son
+**agregados y anónimos** (Meta nunca da identidades) y pueden tardar ~48h. Los
+gráficos de demografía aparecen en el dashboard cuando hay datos.
 
 - `account_snapshots`: un snapshot por día por usuaria (alimenta gráficos de
   evolución). Correrlo dos veces el mismo día actualiza, no duplica.

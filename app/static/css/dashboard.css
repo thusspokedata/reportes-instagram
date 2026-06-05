@@ -91,3 +91,16 @@ body {
 }
 .empty { color: var(--muted); font-size: 0.9rem; margin: 0.3rem 0; }
 .placeholder { border-style: dashed; background: #fafafa; }
+
+/* Demografía: grilla 2x2 */
+.demo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.25rem;
+}
+.demo-grid h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  color: var(--muted);
+}

@@ -84,4 +84,55 @@
       options: baseOptions,
     });
   }
+
+  // --- Demografía de audiencia ---
+  var demo = data.demographics;
+  if (demo) {
+    var demoColors = [
+      "#3b5bdb", "#15aabf", "#7048e8", "#2f9e44", "#e8590c",
+      "#c2255c", "#1098ad", "#5c940d", "#9c36b5", "#0c8599",
+    ];
+
+    function labels(arr) {
+      return arr.map(function (x) { return x.label; });
+    }
+    function values(arr) {
+      return arr.map(function (x) { return x.value; });
+    }
+
+    var genderCanvas = document.getElementById("chart-demo-gender");
+    if (genderCanvas && demo.gender && demo.gender.length) {
+      new Chart(genderCanvas, {
+        type: "doughnut",
+        data: {
+          labels: labels(demo.gender),
+          datasets: [{ data: values(demo.gender), backgroundColor: demoColors }],
+        },
+        options: { responsive: true, plugins: { legend: { position: "bottom" } } },
+      });
+    }
+
+    [
+      ["chart-demo-age", demo.age, "#3b5bdb"],
+      ["chart-demo-country", demo.country, "#2f9e44"],
+      ["chart-demo-city", demo.city, "#7048e8"],
+    ].forEach(function (cfg) {
+      var canvas = document.getElementById(cfg[0]);
+      var arr = cfg[1];
+      if (canvas && arr && arr.length) {
+        new Chart(canvas, {
+          type: "bar",
+          data: {
+            labels: labels(arr),
+            datasets: [{ data: values(arr), backgroundColor: cfg[2] }],
+          },
+          options: {
+            responsive: true,
+            scales: { y: { beginAtZero: true } },
+            plugins: { legend: { display: false } },
+          },
+        });
+      }
+    });
+  }
 })();

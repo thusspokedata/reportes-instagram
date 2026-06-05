@@ -64,3 +64,19 @@ CREATE TABLE IF NOT EXISTS post_metrics (
 -- Un registro por post por usuaria; soporta el upsert al re-bajar métricas.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_post_metrics_user_media
     ON post_metrics (user_id, media_id);
+
+-- Demografía AGREGADA y anónima de la audiencia (insight follower_demographics).
+-- "Foto actual": en cada bajada se reemplazan las filas de la usuaria. Una fila
+-- por (usuaria, breakdown, bucket). value nullable (ausente = NULL, nunca 0).
+CREATE TABLE IF NOT EXISTS audience_demographics (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL,            -- FK -> usuarias.id
+    breakdown   TEXT    NOT NULL,            -- gender | age | country | city
+    bucket      TEXT    NOT NULL,            -- F/M/U, 25-34, AR/DE, "Madrid, ..."
+    value       INTEGER,                     -- conteo agregado
+    fetched_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES usuarias(id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_audience_demographics_user_bd_bucket
+    ON audience_demographics (user_id, breakdown, bucket);
