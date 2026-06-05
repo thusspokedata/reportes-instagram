@@ -1,4 +1,5 @@
 import sqlite3
+from urllib.parse import urlparse
 
 import pytest
 
@@ -44,7 +45,8 @@ def test_login_redirects_to_meta_with_state(client, app):
 
     assert response.status_code == 302
     location = response.headers["Location"]
-    assert "facebook.com" in location
+    # Host exacto (no substring): el redirect debe ir a www.facebook.com.
+    assert urlparse(location).netloc == "www.facebook.com"
     assert "state=" in location
     # Version must come from GRAPH_API_VERSION, not be hardcoded.
     assert app.config["GRAPH_API_VERSION"] in location

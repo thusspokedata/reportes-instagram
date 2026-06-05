@@ -73,10 +73,14 @@ def callback():
         short_token = facebook.exchange_code_for_token(code)
         long_token, expires_in = facebook.exchange_for_long_lived_token(short_token)
         profile = facebook.get_user_profile(long_token)
-    except facebook.OAuthError as exc:
-        # exc message is user-safe and carries no secrets.
+    except facebook.OAuthError:
+        # Mensaje fijo al usuario: no devolvemos el objeto/str de la excepción
+        # (evita exponer trazas; CodeQL py/stack-trace-exposure).
         current_app.logger.warning("Fallo el intercambio OAuth con Meta.")
-        return (str(exc), 400)
+        return (
+            "No se pudo completar el inicio de sesión con Facebook. Probá de nuevo.",
+            400,
+        )
 
     expira_en = None
     try:
