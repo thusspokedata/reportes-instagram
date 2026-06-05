@@ -1,0 +1,28 @@
+# Ejemplo de unit systemd para servir la app con gunicorn detrás de nginx.
+# Copiar a /etc/systemd/system/reportes.service, reemplazar los <placeholders>,
+# y luego: systemctl daemon-reload && systemctl enable --now reportes
+#
+# La app lee su .env (python-dotenv) desde WorkingDirectory, así que no hace
+# falta EnvironmentFile. El .env debe tener permisos 600 y NO estar en el repo.
+
+[Unit]
+Description=Reportes La Huella (gunicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=<usuario-de-servicio>
+Group=<grupo-de-servicio>
+WorkingDirectory=<ruta-del-repo>
+ExecStart=<ruta-del-repo>/.venv/bin/gunicorn --workers 2 --bind 127.0.0.1:8000 wsgi:app
+Restart=on-failure
+RestartSec=3
+
+# Endurecimiento básico (servicio no privilegiado).
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

@@ -8,6 +8,7 @@ import os
 
 from cryptography.fernet import Fernet
 from flask import Flask
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from . import db
 from . import insights
@@ -68,5 +69,14 @@ def create_app():
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
+
+    # Detrás de nginx (1 proxy): honrar X-Forwarded-Proto/Host para que
+    # request.scheme/host reflejen la request pública HTTPS. Necesario para que
+    # las cookies Secure funcionen, request.is_secure sea correcto, la IP real
+    # del cliente quede en los logs, y cualquier url_for(_external=True) genere
+    # https. (El redirect_uri del OAuth sale de config[REDIRECT_URI], estático,
+    # así que NO depende de esto.) En producción gunicorn escucha solo en
+    # 127.0.0.1, así que confiar en estos headers es seguro: solo nginx llega.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     return app
