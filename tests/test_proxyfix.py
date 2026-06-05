@@ -1,3 +1,5 @@
+from urllib.parse import urlparse
+
 from flask import request, url_for
 
 from app import create_app
@@ -19,8 +21,9 @@ def test_proxyfix_honors_forwarded_proto_and_host(env):
         },
     )
 
-    url = resp.get_data(as_text=True)
-    assert url.startswith("https://reportes.lahuelladelcaminante.de")
+    parsed = urlparse(resp.get_data(as_text=True))
+    assert parsed.scheme == "https"
+    assert parsed.netloc == "reportes.lahuelladelcaminante.de"
 
 
 def test_scheme_is_http_without_forwarded_header(env):
