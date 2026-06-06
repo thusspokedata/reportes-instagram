@@ -65,6 +65,11 @@ def create_app():
 
     auth_refresh.init_app(app)
 
+    # `flask generate-monthly-report` command.
+    from . import reports
+
+    reports.init_app(app)
+
     # Blueprints.
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)

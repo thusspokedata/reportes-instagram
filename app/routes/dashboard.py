@@ -13,9 +13,19 @@ respetando los guardrails de datos:
 
 from statistics import median
 
-from flask import Blueprint, redirect, render_template, session, url_for
+from flask import (
+    Blueprint,
+    current_app,
+    flash,
+    redirect,
+    render_template,
+    session,
+    url_for,
+)
 
 from ..db import get_db
+from ..reports import generate as reports_generate
+from ..reports.store import latest_reports
 
 bp = Blueprint("dashboard", __name__)
 
@@ -162,4 +172,43 @@ def dashboard():
 
     data = build_dashboard_data(snapshot, posts)
     data["demographics"] = build_demographics(demo_rows)
-    return render_template("dashboard.html", data=data)
+
+    reports = latest_reports(user_id)
+    return render_template("dashboard.html", data=data, reports=reports)
+
+
+@bp.route("/reporte", methods=["POST"])
+def generar_reporte():
+    """Genera un reporte de texto a pedido y vuelve al dashboard.
+
+    Protección CSRF: la cookie de sesión es SameSite=Lax, así que un POST
+    cross-site no la envía. Degradación defensiva: si falta la clave o la API
+    de Claude falla, se avisa con un flash y no se rompe.
+    """
+    user_id = session.get("user_id")
+    if not session.get("logged_in") or not user_id:
+        return redirect(url_for("auth.login"))
+
+    user = get_db().execute(
+        "SELECT * FROM usuarias WHERE id = ?", (user_id,)
+    ).fetchone()
+    if user is None:
+        return redirect(url_for("auth.login"))
+
+    cfg = current_app.config
+    try:
+        reports_generate.generate_and_save_report(
+            user,
+            period_label=reports_generate.ON_DEMAND_LABEL,
+            api_key=cfg.get("ANTHROPIC_API_KEY"),
+            model=cfg.get("REPORT_MODEL") or reports_generate.DEFAULT_REPORT_MODEL,
+        )
+        flash("Reporte generado.", "ok")
+    except reports_generate.ReportError:
+        # El detalle ya quedó logueado en generate (sin secretos). Al usuario,
+        # un mensaje genérico y accionable.
+        flash(
+            "No se pudo generar el reporte ahora mismo. Probá de nuevo en un rato.",
+            "error",
+        )
+    return redirect(url_for("dashboard.dashboard"))

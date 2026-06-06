@@ -14,6 +14,27 @@ hoy; se priorizan cuando corresponda. Cada ítem indica su origen.
   - Origen: SPEC 04 (observado al revisar el gráfico real).
   - Esfuerzo: bajo.
 
+## Reportes (Claude API)
+
+- **Rate-limit / debounce del botón "Generar reporte".**
+  El POST `/reporte` dispara una llamada paga a la API de Claude por cada click,
+  sin límite. Una usuaria autenticada podría generar muchos reportes seguidos y
+  gastar tokens. Agregar un guard simple (p. ej. no generar si ya hay uno muy
+  reciente, o un límite por usuaria/tiempo). Riesgo acotado: app privada, exige
+  sesión.
+  - Archivo: `app/routes/dashboard.py` (`generar_reporte`).
+  - Origen: SPEC 07 (gate de seguridad, OBSERVACIÓN-2).
+  - Esfuerzo: bajo.
+
+- **Unificar la lectura de métricas de la usuaria (dedup de queries).**
+  Las tres queries (snapshot + posts + demografía) se repiten textualmente entre
+  `app/routes/dashboard.py` (ruta `dashboard`) y
+  `app/reports/generate.py` (`generate_and_save_report`). Extraer un helper
+  compartido (`load_user_metrics(db, user_id)`) para que no diverjan — las
+  consultas cargan justo las columnas que alimentan los guardrails.
+  - Origen: SPEC 07 (revisión interna, M3).
+  - Esfuerzo: bajo.
+
 ## Plataforma / deuda técnica
 
 - **Converters deprecados de sqlite3 (Python 3.12).**

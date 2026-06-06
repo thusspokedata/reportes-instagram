@@ -101,3 +101,22 @@ def test_database_env_var_wins_over_default(env):
 
     # The fixture points DATABASE at a temp file; the env value must be honored.
     assert app.config["DATABASE"] == str(env["db_path"])
+
+
+def test_report_model_defaults_to_haiku(env, monkeypatch):
+    monkeypatch.delenv("REPORT_MODEL", raising=False)
+    app = create_app()
+    assert app.config["REPORT_MODEL"] == "claude-haiku-4-5"
+
+
+def test_report_model_env_override(env, monkeypatch):
+    monkeypatch.setenv("REPORT_MODEL", "claude-opus-4-8")
+    app = create_app()
+    assert app.config["REPORT_MODEL"] == "claude-opus-4-8"
+
+
+def test_anthropic_api_key_none_when_unset(env, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    app = create_app()
+    # Se lee del entorno; ausente = None (la app no exige la clave para arrancar).
+    assert app.config["ANTHROPIC_API_KEY"] is None

@@ -6,6 +6,17 @@
 {% endblock %}
 
 {% block content %}
+  {# ---- Avisos (flash): resultado de generar un reporte, etc. ---- #}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <ul class="flashes">
+        {% for category, message in messages %}
+          <li class="flash flash-{{ category }}">{{ message }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  {% endwith %}
+
   {# ---- Resumen de cuenta (tarjetas). NULL -> "sin dato", nunca 0. ---- #}
   <section class="cards" aria-label="Resumen de cuenta">
     <div class="card">
@@ -129,6 +140,33 @@
         {{ data.summary.posts }}.
       {% endif %}
     </p>
+  </section>
+
+  {# ---- Reporte de texto (generado con la API de Claude) ---- #}
+  <section class="panel reports">
+    <h2>Reporte en palabras</h2>
+    <p class="note">Resumen descriptivo de las métricas, generado con IA. Es
+      descriptivo (no recomienda ni infiere causas) y respeta los límites de los
+      datos (muestra chica, métricas sin dato).</p>
+    <form method="post" action="{{ url_for('dashboard.generar_reporte') }}">
+      <button type="submit" class="btn-report">Generar reporte</button>
+    </form>
+
+    {% if reports %}
+      {% for r in reports %}
+        <article class="report">
+          <h3>
+            {{ r.period_label or "Reporte" }}
+            <span class="report-meta">· {{ r.generado_en }}</span>
+          </h3>
+          {# Prosa del modelo: autoescapada por Jinja (sin |safe). El <pre>
+             preserva los saltos de párrafo sin permitir HTML inyectado. #}
+          <pre class="report-content">{{ r.content }}</pre>
+        </article>
+      {% endfor %}
+    {% else %}
+      <p class="empty">Todavía no generaste ningún reporte.</p>
+    {% endif %}
   </section>
 
   {# Datos calculados en backend, serializados de forma segura para Chart.js. #}

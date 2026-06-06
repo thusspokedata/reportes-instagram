@@ -72,9 +72,31 @@ token, después tomar el snapshot). Ejemplo (diario 06:00, ajustar rutas):
 # m h  dom mon dow   command
 # 0 6  *   *   *     cd /ruta/app && /ruta/.venv/bin/flask refresh-tokens >> /var/log/reportes/refresh.log 2>&1
 # 5 6  *   *   *     cd /ruta/app && /ruta/.venv/bin/flask daily-snapshot  >> /var/log/reportes/snapshot.log 2>&1
+# 0 7  1   *   *     cd /ruta/app && /ruta/.venv/bin/flask generate-monthly-report >> /var/log/reportes/report.log 2>&1
 ```
 
 (Líneas comentadas a propósito: el cron se enchufa al deployar, no en desarrollo.)
+
+## Reporte de texto (API de Claude)
+
+El dashboard tiene un botón **"Generar reporte"** que produce un resumen en
+prosa de las métricas usando la API de Claude (Messages API). También se puede
+generar a mano o por cron mensual:
+
+```bash
+flask generate-monthly-report   # un reporte por usuaria, etiquetado con el mes anterior
+```
+
+- El reporte es **descriptivo** (no recomienda ni infiere causas) y respeta los
+  guardrails de datos: muestra chica (N&lt;12) → sin conclusiones; `NULL` = sin
+  dato (nunca 0); demografía como referencia.
+- A Claude se le mandan **sólo métricas agregadas y anónimas** — nunca tokens ni
+  IDs internos. El contenido se guarda en la base (historial) y se muestra
+  escapado (sin XSS).
+- Requiere `ANTHROPIC_API_KEY` (ver Configuración). Si falta o la API falla, la
+  generación **degrada con un aviso**, sin romper la app. El modelo es
+  configurable con `REPORT_MODEL` (por defecto `claude-haiku-4-5`, el más
+  económico).
 
 ## Requisitos
 
@@ -125,6 +147,8 @@ Ninguna credencial se versiona ni se loguea.
 | `DATABASE`              | Ruta a la SQLite (default `instance/reportes.db`).   |
 | `SESSION_COOKIE_SECURE` | Cookies sólo por HTTPS. `False` en local, `True` prod.|
 | `FLASK_DEBUG`           | `1` activa el debugger local (default off).           |
+| `ANTHROPIC_API_KEY`     | Clave de la API de Claude (reporte de texto). Secreta. |
+| `REPORT_MODEL`          | Modelo del reporte (default `claude-haiku-4-5`).      |
 
 Si falta `SECRET_KEY` o `TOKEN_ENCRYPTION_KEY` (o esta última es inválida), la
 app **no arranca** y falla con un error explícito.
