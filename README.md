@@ -88,7 +88,7 @@ flask generate-monthly-report   # un reporte por usuaria, etiquetado con el mes 
 ```
 
 - El reporte es **descriptivo** (no recomienda ni infiere causas) y respeta los
-  guardrails de datos: muestra chica (N&lt;12) → sin conclusiones; `NULL` = sin
+  guardrails de datos: muestra chica (N<12) → sin conclusiones; `NULL` = sin
   dato (nunca 0); demografía como referencia.
 - A Claude se le mandan **sólo métricas agregadas y anónimas** — nunca tokens ni
   IDs internos. El contenido se guarda en la base (historial) y se muestra

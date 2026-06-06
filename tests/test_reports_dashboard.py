@@ -34,6 +34,49 @@ def test_generar_reporte_creates_report(user_factory, inited_app, monkeypatch):
     assert n == 1
 
 
+def test_generar_reporte_rejects_cross_origin(user_factory, inited_app, monkeypatch):
+    user = user_factory()
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    called = {"n": 0}
+
+    def spy(*a, **k):
+        called["n"] += 1
+        return "x"
+
+    monkeypatch.setattr(generate, "generate_report_text", spy)
+
+    client = inited_app.test_client()
+    _login(client, user)
+    # Un POST con Origin de otro dominio (CSRF) debe rechazarse y NO generar.
+    response = client.post("/reporte", headers={"Origin": "http://evil.example"})
+
+    assert response.status_code == 403
+    assert called["n"] == 0
+    with inited_app.app_context():
+        n = get_db().execute(
+            "SELECT COUNT(*) c FROM reports WHERE user_id = ?", (user["id"],)
+        ).fetchone()["c"]
+    assert n == 0
+
+
+def test_generar_reporte_allows_same_origin(user_factory, inited_app, monkeypatch):
+    user = user_factory()
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    monkeypatch.setattr(generate, "generate_report_text", lambda *a, **k: "ok")
+
+    client = inited_app.test_client()
+    _login(client, user)
+    # Origin propio (mismo host del test client): se acepta.
+    response = client.post("/reporte", headers={"Origin": "http://localhost"})
+
+    assert response.status_code == 302
+    with inited_app.app_context():
+        n = get_db().execute(
+            "SELECT COUNT(*) c FROM reports WHERE user_id = ?", (user["id"],)
+        ).fetchone()["c"]
+    assert n == 1
+
+
 def test_generar_reporte_degrades_on_failure(user_factory, inited_app, monkeypatch):
     user = user_factory()
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")

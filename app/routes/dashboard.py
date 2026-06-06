@@ -12,13 +12,16 @@ respetando los guardrails de datos:
 """
 
 from statistics import median
+from urllib.parse import urlparse
 
 from flask import (
     Blueprint,
+    abort,
     current_app,
     flash,
     redirect,
     render_template,
+    request,
     session,
     url_for,
 )
@@ -177,17 +180,45 @@ def dashboard():
     return render_template("dashboard.html", data=data, reports=reports)
 
 
+def _same_origin_request():
+    """Defensa CSRF en profundidad: el POST debe venir del propio sitio.
+
+    Capa 1 (cookie SameSite=Lax) ya evita que un POST cross-site mande la
+    cookie de sesión. Esta capa 2 valida ``Origin`` (y si falta, ``Referer``)
+    contra el host de la request: un form CSRF en otro dominio llega con un
+    Origin/Referer ajeno y se rechaza. Si NO viene ninguno de los dos, se
+    permite (SameSite ya cubre ese caso y así no rompemos clientes que borran
+    esas cabeceras por privacidad). Compara esquema+host con urlparse (no
+    substring), igual que el resto del repo.
+    """
+    host = urlparse(request.host_url)
+    origin = request.headers.get("Origin")
+    if origin:
+        o = urlparse(origin)
+        return (o.scheme, o.netloc) == (host.scheme, host.netloc)
+    referer = request.headers.get("Referer")
+    if referer:
+        r = urlparse(referer)
+        return (r.scheme, r.netloc) == (host.scheme, host.netloc)
+    return True
+
+
 @bp.route("/reporte", methods=["POST"])
 def generar_reporte():
     """Genera un reporte de texto a pedido y vuelve al dashboard.
 
-    Protección CSRF: la cookie de sesión es SameSite=Lax, así que un POST
-    cross-site no la envía. Degradación defensiva: si falta la clave o la API
-    de Claude falla, se avisa con un flash y no se rompe.
+    Protección CSRF en dos capas: cookie de sesión SameSite=Lax + validación
+    same-origin de Origin/Referer (ver ``_same_origin_request``). Degradación
+    defensiva: si falta la clave o la API de Claude falla, se avisa con un
+    flash y no se rompe.
     """
     user_id = session.get("user_id")
     if not session.get("logged_in") or not user_id:
         return redirect(url_for("auth.login"))
+
+    if not _same_origin_request():
+        # Rechazo claro (no se procesa) ante un POST de origen cruzado.
+        abort(403)
 
     user = get_db().execute(
         "SELECT * FROM usuarias WHERE id = ?", (user_id,)
