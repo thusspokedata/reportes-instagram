@@ -50,3 +50,11 @@ class Config:
         # it always comes from GRAPH_API_VERSION above.
         self.FACEBOOK_OAUTH_DIALOG_BASE = "https://www.facebook.com"
         self.GRAPH_API_BASE = "https://graph.facebook.com"
+
+        # Reporte de texto con la API de Claude (Messages API). La clave es un
+        # secreto: viene del entorno, no se versiona ni se loguea. Es opcional
+        # para arrancar — sólo se exige al generar un reporte (degradación
+        # defensiva si falta). El modelo es configurable; por defecto el más
+        # económico (Haiku 4.5). Acepta el alias o el ID con fecha.
+        self.ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+        self.REPORT_MODEL = os.environ.get("REPORT_MODEL", "claude-haiku-4-5")

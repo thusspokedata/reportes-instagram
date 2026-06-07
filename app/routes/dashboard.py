@@ -12,10 +12,23 @@ respetando los guardrails de datos:
 """
 
 from statistics import median
+from urllib.parse import urlparse
 
-from flask import Blueprint, redirect, render_template, session, url_for
+from flask import (
+    Blueprint,
+    abort,
+    current_app,
+    flash,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 
 from ..db import get_db
+from ..reports import generate as reports_generate
+from ..reports.store import latest_reports
 
 bp = Blueprint("dashboard", __name__)
 
@@ -162,4 +175,71 @@ def dashboard():
 
     data = build_dashboard_data(snapshot, posts)
     data["demographics"] = build_demographics(demo_rows)
-    return render_template("dashboard.html", data=data)
+
+    reports = latest_reports(user_id)
+    return render_template("dashboard.html", data=data, reports=reports)
+
+
+def _same_origin_request():
+    """Defensa CSRF en profundidad: el POST debe venir del propio sitio.
+
+    Capa 1 (cookie SameSite=Lax) ya evita que un POST cross-site mande la
+    cookie de sesión. Esta capa 2 valida ``Origin`` (y si falta, ``Referer``)
+    contra el host de la request: un form CSRF en otro dominio llega con un
+    Origin/Referer ajeno y se rechaza. Si NO viene ninguno de los dos, se
+    permite (SameSite ya cubre ese caso y así no rompemos clientes que borran
+    esas cabeceras por privacidad). Compara esquema+host con urlparse (no
+    substring), igual que el resto del repo.
+    """
+    host = urlparse(request.host_url)
+    origin = request.headers.get("Origin")
+    if origin:
+        o = urlparse(origin)
+        return (o.scheme, o.netloc) == (host.scheme, host.netloc)
+    referer = request.headers.get("Referer")
+    if referer:
+        r = urlparse(referer)
+        return (r.scheme, r.netloc) == (host.scheme, host.netloc)
+    return True
+
+
+@bp.route("/reporte", methods=["POST"])
+def generar_reporte():
+    """Genera un reporte de texto a pedido y vuelve al dashboard.
+
+    Protección CSRF en dos capas: cookie de sesión SameSite=Lax + validación
+    same-origin de Origin/Referer (ver ``_same_origin_request``). Degradación
+    defensiva: si falta la clave o la API de Claude falla, se avisa con un
+    flash y no se rompe.
+    """
+    user_id = session.get("user_id")
+    if not session.get("logged_in") or not user_id:
+        return redirect(url_for("auth.login"))
+
+    if not _same_origin_request():
+        # Rechazo claro (no se procesa) ante un POST de origen cruzado.
+        abort(403)
+
+    user = get_db().execute(
+        "SELECT * FROM usuarias WHERE id = ?", (user_id,)
+    ).fetchone()
+    if user is None:
+        return redirect(url_for("auth.login"))
+
+    cfg = current_app.config
+    try:
+        reports_generate.generate_and_save_report(
+            user,
+            period_label=reports_generate.ON_DEMAND_LABEL,
+            api_key=cfg.get("ANTHROPIC_API_KEY"),
+            model=cfg.get("REPORT_MODEL") or reports_generate.DEFAULT_REPORT_MODEL,
+        )
+        flash("Reporte generado.", "ok")
+    except reports_generate.ReportError:
+        # El detalle ya quedó logueado en generate (sin secretos). Al usuario,
+        # un mensaje genérico y accionable.
+        flash(
+            "No se pudo generar el reporte ahora mismo. Probá de nuevo en un rato.",
+            "error",
+        )
+    return redirect(url_for("dashboard.dashboard"))

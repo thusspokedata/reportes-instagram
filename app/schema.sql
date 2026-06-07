@@ -80,3 +80,21 @@ CREATE TABLE IF NOT EXISTS audience_demographics (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_audience_demographics_user_bd_bucket
     ON audience_demographics (user_id, breakdown, bucket);
+
+-- Reportes de texto generados con la API de Claude (Messages API). Cada fila es
+-- un reporte DESCRIPTIVO en prosa de las métricas de la usuaria, generado a
+-- pedido (botón del dashboard) o por el cron mensual. Se acumulan (historial):
+-- a diferencia de los snapshots/demografía, acá NO se reemplaza.
+CREATE TABLE IF NOT EXISTS reports (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id       INTEGER NOT NULL,           -- FK -> usuarias.id
+    period_label  TEXT,                        -- "2026-05" (mensual) | "a pedido"
+    model         TEXT,                        -- modelo que lo generó (trazabilidad)
+    content       TEXT    NOT NULL,            -- el reporte en prosa (texto plano)
+    generado_en   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES usuarias(id) ON DELETE CASCADE
+);
+
+-- Historial por usuaria, más nuevo primero.
+CREATE INDEX IF NOT EXISTS idx_reports_user_generado
+    ON reports (user_id, generado_en DESC);
