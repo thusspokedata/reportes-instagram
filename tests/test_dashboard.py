@@ -1,3 +1,6 @@
+import json
+import re
+
 from app.db import get_db
 from app.routes.dashboard import (
     MIN_SAMPLE,
@@ -5,7 +8,17 @@ from app.routes.dashboard import (
     _reach_by_media_type,
     build_dashboard_data,
     build_demographics,
+    build_evolution,
 )
+
+
+def _snap(date, followers=None, reach=None, views=None):
+    return {
+        "snapshot_date": date,
+        "follower_count": followers,
+        "reach": reach,
+        "views": views,
+    }
 
 
 def _drow(breakdown, bucket, value):
@@ -209,3 +222,142 @@ def test_build_demographics_otros_is_none_when_rest_all_none():
     otros = [c for c in demo["country"] if c["label"] == "Otros"]
     assert len(otros) == 1
     assert otros[0]["value"] is None  # null, nunca 0
+
+
+# --- evolución (serie temporal) ------------------------------------------
+
+def test_build_evolution_orders_and_preserves_null():
+    rows = [
+        _snap("2026-06-03", 147, 228),
+        _snap("2026-06-06", 154, None),  # reach NULL
+    ]
+    evo = build_evolution(rows)
+    assert evo["labels"] == ["2026-06-03", "2026-06-06"]
+    assert evo["followers"] == [147, 154]
+    assert evo["reach"] == [228, None]  # NULL se preserva, nunca 0
+    assert evo["enough"] is True
+
+
+def test_build_evolution_views_none_when_all_null():
+    rows = [_snap("2026-06-03", 147, 228, None), _snap("2026-06-04", 150, 100, None)]
+    # views todo NULL (caso típico): la serie se omite (no se dibuja vacía).
+    assert build_evolution(rows)["views"] is None
+
+
+def test_build_evolution_views_present_when_some_real():
+    rows = [_snap("2026-06-03", 147, 228, None), _snap("2026-06-04", 150, 100, 5)]
+    assert build_evolution(rows)["views"] == [None, 5]
+
+
+def test_build_evolution_not_enough_with_single_point():
+    # Una línea de un solo punto no se dibuja.
+    assert build_evolution([_snap("2026-06-03", 147, 228)])["enough"] is False
+
+
+def test_build_evolution_empty():
+    evo = build_evolution([])
+    assert evo["enough"] is False
+    assert evo["labels"] == []
+
+
+def _insert_snapshots(db, user_id, rows):
+    for date, followers, reach in rows:
+        db.execute(
+            "INSERT INTO account_snapshots (user_id, snapshot_date, follower_count, reach)"
+            " VALUES (?, ?, ?, ?)",
+            (user_id, date, followers, reach),
+        )
+    db.commit()
+
+
+def test_dashboard_renders_evolution_with_enough_snapshots(user_factory, inited_app):
+    user = user_factory()
+    with inited_app.app_context():
+        _insert_snapshots(
+            get_db(),
+            user["id"],
+            [("2026-06-03", 147, 228), ("2026-06-04", 150, 100), ("2026-06-05", 155, 300)],
+        )
+    client = inited_app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = user["id"]
+        sess["logged_in"] = True
+
+    response = client.get("/dashboard")
+
+    assert response.status_code == 200
+    assert b"chart-evolution-followers" in response.data
+    assert b"chart-evolution-reach" in response.data
+
+
+def test_dashboard_evolution_placeholder_with_one_snapshot(user_factory, inited_app):
+    user = user_factory()
+    with inited_app.app_context():
+        _insert_snapshots(get_db(), user["id"], [("2026-06-03", 147, 228)])
+    client = inited_app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = user["id"]
+        sess["logged_in"] = True
+
+    response = client.get("/dashboard")
+
+    assert response.status_code == 200
+    # Con 1 solo snapshot no se dibuja la evolución (se mantiene el placeholder).
+    assert b"chart-evolution-followers" not in response.data
+
+
+def _dashboard_data(html_bytes):
+    """Extrae el JSON inyectado para Chart.js desde el HTML renderizado."""
+    m = re.search(
+        rb'<script id="dashboard-data" type="application/json">(.*?)</script>',
+        html_bytes,
+        re.S,
+    )
+    assert m, "no se encontró el bloque dashboard-data"
+    return json.loads(m.group(1).decode())
+
+
+def test_dashboard_evolution_orders_by_date_and_card_shows_latest(
+    user_factory, inited_app
+):
+    user = user_factory()
+    with inited_app.app_context():
+        # Insertadas DESORDENADAS a propósito: la serie debe salir ASC y la
+        # tarjeta de seguidores debe mostrar el día más reciente (no el viejo).
+        _insert_snapshots(
+            get_db(),
+            user["id"],
+            [("2026-06-05", 155, 300), ("2026-06-03", 147, 228), ("2026-06-04", 150, 100)],
+        )
+    client = inited_app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = user["id"]
+        sess["logged_in"] = True
+
+    response = client.get("/dashboard")
+    data = _dashboard_data(response.data)
+
+    assert data["evolution"]["labels"] == ["2026-06-03", "2026-06-04", "2026-06-05"]
+    assert data["evolution"]["followers"] == [147, 150, 155]
+    # La tarjeta de resumen toma el snapshot más reciente.
+    assert data["summary"]["followers"] == 155
+
+
+def test_dashboard_evolution_reach_null_serialized_as_null(user_factory, inited_app):
+    user = user_factory()
+    with inited_app.app_context():
+        _insert_snapshots(
+            get_db(),
+            user["id"],
+            [("2026-06-03", 147, 228), ("2026-06-04", 150, None)],  # reach NULL
+        )
+    client = inited_app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = user["id"]
+        sess["logged_in"] = True
+
+    response = client.get("/dashboard")
+    data = _dashboard_data(response.data)
+
+    # NULL llega como null (no 0, no "None") al JSON que consume Chart.js.
+    assert data["evolution"]["reach"] == [228, None]

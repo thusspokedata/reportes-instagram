@@ -118,17 +118,26 @@
     {% endif %}
   </section>
 
-  {# ---- Gráficos estructurados, aún sin datos suficientes ---- #}
-  <section class="panel placeholder">
+  {# ---- Evolución (serie temporal de snapshots diarios) ---- #}
+  <section class="panel">
     <h2>Crecimiento de seguidores</h2>
-    <p class="empty">Se completará a medida que se acumulen snapshots diarios
-      (requiere el cron de la Fase 3). No se dibuja una línea de un solo punto.</p>
+    {% if data.evolution and data.evolution.enough %}
+      <canvas id="chart-evolution-followers" height="120"></canvas>
+    {% else %}
+      <p class="empty">Se completará a medida que se acumulen snapshots diarios.
+        No se dibuja una línea de un solo punto.</p>
+    {% endif %}
   </section>
 
-  <section class="panel placeholder">
+  <section class="panel">
     <h2>Reach / vistas por día</h2>
-    <p class="empty">Se completará a medida que se acumulen snapshots diarios
-      (requiere el cron de la Fase 3).</p>
+    {% if data.evolution and data.evolution.enough %}
+      <p class="note">Reach diario. Las vistas sólo aparecen si Meta las devuelve.
+        Los días sin dato quedan vacíos, nunca en 0.</p>
+      <canvas id="chart-evolution-reach" height="120"></canvas>
+    {% else %}
+      <p class="empty">Se completará a medida que se acumulen snapshots diarios.</p>
+    {% endif %}
   </section>
 
   <section class="panel placeholder">
