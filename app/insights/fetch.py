@@ -282,7 +282,7 @@ def fetch_media_list(user, ig_id=None) -> list:
 def fetch_media_insights(user, media_id, media_type=None) -> dict:
     """Baja, de forma defensiva, las métricas de insights de un post.
 
-    Costo: una llamada por métrica, así que escala 5×N posts en fetch-insights
+    Costo: una llamada por métrica, así que escala 5xN posts en fetch-insights
     (presupuesto de Meta ~200/h). Tenerlo en cuenta al sumar más métricas.
     """
     token = decrypt_token(user["access_token_cifrado"])
