@@ -40,6 +40,9 @@ GENDER_LABELS = {"F": "Femenino", "M": "Masculino", "U": "Desconocido"}
 TOP_COUNTRIES = 8
 TOP_CITIES = 10
 
+# Mínimo de puntos para dibujar una línea de evolución (no se grafica 1 punto).
+EVOLUTION_MIN_POINTS = 2
+
 
 def _median(values):
     """Mediana ignorando NULL (None). Devuelve None si no hay datos reales."""
@@ -147,6 +150,31 @@ def build_demographics(rows):
     }
 
 
+def build_evolution(snapshots):
+    """Serie temporal de la cuenta para los gráficos de evolución.
+
+    ``snapshots`` son las filas ordenadas por fecha ASC (snapshot_date,
+    follower_count, reach, views). Preserva ``None`` (NULL≠0: un día sin dato
+    queda como hueco, nunca 0). Sólo se grafican los días que existen — no se
+    inventan ceros para los faltantes. ``views`` se omite (None) si ningún día
+    tiene un dato real (en muchas cuentas Meta no lo devuelve). ``enough`` es
+    True con ≥2 puntos (una línea de un solo punto no se dibuja).
+    """
+    snapshots = list(snapshots)
+    views = [s["views"] for s in snapshots]
+    return {
+        # snapshot_date está declarado DATE: con PARSE_DECLTYPES sqlite lo
+        # devuelve como datetime.date, que tojson serializaría como un string
+        # HTTP feo ("Wed, 03 Jun 2026 ..."). str() lo normaliza a ISO
+        # ("2026-06-03") y es no-op si ya viene como string.
+        "labels": [str(s["snapshot_date"]) for s in snapshots],
+        "followers": [s["follower_count"] for s in snapshots],
+        "reach": [s["reach"] for s in snapshots],
+        "views": views if any(v is not None for v in views) else None,
+        "enough": len(snapshots) >= EVOLUTION_MIN_POINTS,
+    }
+
+
 @bp.route("/dashboard")
 def dashboard():
     """Página del dashboard. Requiere sesión iniciada."""
@@ -155,11 +183,14 @@ def dashboard():
         return redirect(url_for("auth.login"))
 
     db = get_db()
-    snapshot = db.execute(
-        "SELECT follower_count, reach FROM account_snapshots"
-        " WHERE user_id = ? ORDER BY snapshot_date DESC LIMIT 1",
+    # Serie completa de snapshots (ASC) para los gráficos de evolución; el
+    # último elemento es el snapshot más reciente que alimenta las tarjetas.
+    snapshots = db.execute(
+        "SELECT snapshot_date, follower_count, reach, views FROM account_snapshots"
+        " WHERE user_id = ? ORDER BY snapshot_date ASC",
         (user_id,),
-    ).fetchone()
+    ).fetchall()
+    snapshot = snapshots[-1] if snapshots else None
     # Minimización de datos: sólo las columnas que el dashboard usa
     # (caption/permalink no se renderizan, no se traen).
     posts = db.execute(
@@ -175,6 +206,7 @@ def dashboard():
 
     data = build_dashboard_data(snapshot, posts)
     data["demographics"] = build_demographics(demo_rows)
+    data["evolution"] = build_evolution(snapshots)
 
     reports = latest_reports(user_id)
     return render_template("dashboard.html", data=data, reports=reports)
