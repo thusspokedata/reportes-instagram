@@ -90,5 +90,11 @@ El `cd` asegura que python-dotenv lea el `.env` del working dir.
 ## Re-deploys futuros
 ```bash
 cd /opt/reportes-instagram && git pull && .venv/bin/pip install -r requirements.txt
+sudo -u reportes .venv/bin/flask init-db   # aplica schema + migraciones de columnas
 sudo systemctl restart reportes
 ```
+
+`init-db` es **parte estándar del re-deploy**: además de crear tablas nuevas
+(`CREATE TABLE IF NOT EXISTS`), aplica las migraciones de columnas (`ALTER
+TABLE` idempotente). No toca datos existentes. Omitirlo cuando una release
+agrega columnas causa errores de `no such column`.

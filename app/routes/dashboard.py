@@ -47,8 +47,13 @@ EVOLUTION_MIN_POINTS = 2
 
 
 def _median(values):
-    """Mediana ignorando NULL (None). Devuelve None si no hay datos reales."""
-    nums = [v for v in values if v is not None]
+    """Mediana ignorando NULL (None) y basura no numérica.
+
+    SQLite es de tipado dinámico y los valores vienen de Meta: si alguna vez
+    llegara un no-número, se ignora (como un NULL) en vez de romper la
+    aritmética. Devuelve None si no quedan datos reales.
+    """
+    nums = [v for v in values if isinstance(v, (int, float))]
     if not nums:
         return None
     return median(nums)
@@ -99,6 +104,18 @@ def build_dashboard_data(snapshot, posts):
         }
         for p in posts
     ]
+    # Tiempo de visualización de Reels (sólo VIDEO; ms -> segundos al mostrar).
+    watch_ms = _median(
+        [_row_val(p, "avg_watch_time_ms") for p in posts if p["media_type"] == "VIDEO"]
+    )
+    # Mismo criterio que _median (numérico real): n y mediana cuentan lo mismo.
+    reels_n = sum(
+        1
+        for p in posts
+        if p["media_type"] == "VIDEO"
+        and isinstance(_row_val(p, "avg_watch_time_ms"), (int, float))
+    )
+
     return {
         "summary": {
             "followers": _row_val(snapshot, "follower_count"),
@@ -106,7 +123,13 @@ def build_dashboard_data(snapshot, posts):
             "views": _row_val(snapshot, "views"),
             "interactions": _row_val(snapshot, "total_interactions"),
             "accounts_engaged": _row_val(snapshot, "accounts_engaged"),
+            "profile_views": _row_val(snapshot, "profile_views"),
+            "website_clicks": _row_val(snapshot, "website_clicks"),
             "posts": len(posts),
+        },
+        "reels": {
+            "median_watch_s": round(watch_ms / 1000, 1) if watch_ms is not None else None,
+            "n": reels_n,
         },
         "engagement": engagement,
         "reach_by_type": _reach_by_media_type(posts),
@@ -205,7 +228,7 @@ def dashboard():
     # último elemento es el snapshot más reciente que alimenta las tarjetas.
     snapshots = db.execute(
         "SELECT snapshot_date, follower_count, reach, views, accounts_engaged,"
-        " total_interactions FROM account_snapshots"
+        " total_interactions, profile_views, website_clicks FROM account_snapshots"
         " WHERE user_id = ? ORDER BY snapshot_date ASC",
         (user_id,),
     ).fetchall()
@@ -214,7 +237,7 @@ def dashboard():
     # (caption/permalink no se renderizan, no se traen).
     posts = db.execute(
         "SELECT media_id, media_type, timestamp, likes, comments, reach, views,"
-        " saved, shares, total_interactions"
+        " saved, shares, total_interactions, avg_watch_time_ms"
         " FROM post_metrics WHERE user_id = ? ORDER BY timestamp",
         (user_id,),
     ).fetchall()

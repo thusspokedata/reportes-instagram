@@ -67,6 +67,17 @@ hoy; se priorizan cuando corresponda. Cada ítem indica su origen.
   - Origen: SPEC "más métricas" (sonda contra la cuenta real).
   - Esfuerzo: medio (cuando haya datos).
 
+- **Métricas de Reels: refinamientos pendientes.**
+  (a) `video_view_total_time_ms` se baja y persiste pero todavía no se muestra
+  en el dashboard ("guardar ahora, graficar después"). (b) El gate de las
+  métricas de Reels es `media_type == "VIDEO"`, que asume video = Reel; un video
+  de feed legacy dispararía 2 llamadas que Meta rechaza (la degradación
+  defensiva lo absorbe — sólo gasta rate limit). Si hace falta, afinar con
+  `media_product_type == "REELS"` del media object.
+  - Archivos: `app/insights/fetch.py`, `app/routes/dashboard.py`.
+  - Origen: 1b (gates de revisión/datos).
+  - Esfuerzo: bajo.
+
 ## Plataforma / deuda técnica
 
 - **Converters deprecados de sqlite3 (Python 3.12).**

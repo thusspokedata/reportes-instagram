@@ -7,6 +7,7 @@ request reuses one connection, and it is closed automatically on teardown.
 """
 
 import os
+import re
 import sqlite3
 
 import click
@@ -42,10 +43,47 @@ def close_db(e=None):
         db.close()
 
 
-def init_db():
-    """Create the database file and apply ``schema.sql``.
+# Columnas agregadas DESPUÉS de que una tabla ya existía en producción.
+# ``CREATE TABLE IF NOT EXISTS`` no altera tablas existentes, así que init_db
+# las migra con ALTER TABLE (idempotente: sólo agrega las que falten). Las
+# columnas nuevas nacen NULL (= sin dato, consistente con el guardrail NULL≠0).
+_COLUMN_MIGRATIONS = {
+    "account_snapshots": {
+        "profile_views": "INTEGER",
+        "website_clicks": "INTEGER",
+    },
+    "post_metrics": {
+        "avg_watch_time_ms": "INTEGER",
+        "video_view_total_time_ms": "INTEGER",
+    },
+}
 
-    The parent directory (e.g. ``instance/``) is created if missing.
+
+# Forma válida de los identificadores/tipos de _COLUMN_MIGRATIONS. Guard
+# defensivo: el dict es literal hoy, pero si un refactor futuro lo alimentara
+# desde otra fuente, esto evita que llegue algo raro al SQL interpolado.
+_IDENT_RE = re.compile(r"[a-z_][a-z0-9_]*\Z")
+
+
+def _ensure_columns(db):
+    """Agrega a las tablas existentes las columnas que falten (idempotente)."""
+    for table, columns in _COLUMN_MIGRATIONS.items():
+        if not _IDENT_RE.match(table):
+            raise ValueError(f"Nombre de tabla inválido en migración: {table!r}")
+        existing = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
+        for name, decl in columns.items():
+            if not _IDENT_RE.match(name) or decl != "INTEGER":
+                raise ValueError(f"Columna/tipo inválido en migración: {name!r} {decl!r}")
+            if name not in existing:
+                # Identificadores fijos del dict de arriba, validados arriba.
+                db.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+
+
+def init_db():
+    """Create the database file and apply ``schema.sql`` (+ column migrations).
+
+    The parent directory (e.g. ``instance/``) is created if missing. Re-running
+    is safe: tables are IF NOT EXISTS and column migrations are idempotent.
     """
     db_path = current_app.config["DATABASE"]
     parent = os.path.dirname(db_path)
@@ -55,6 +93,7 @@ def init_db():
     db = get_db()
     with current_app.open_resource("schema.sql") as f:
         db.executescript(f.read().decode("utf8"))
+    _ensure_columns(db)
     db.commit()
 
 
