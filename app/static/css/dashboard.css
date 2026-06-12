@@ -154,7 +154,7 @@ body {
   /* pre-wrap: respeta los saltos de párrafo del modelo y además envuelve el
      texto largo (un <pre> normal se desbordaría horizontalmente). */
   white-space: pre-wrap;
-  word-wrap: break-word;
+  overflow-wrap: break-word;
   font-family: inherit;
   font-size: 0.92rem;
   color: var(--ink);

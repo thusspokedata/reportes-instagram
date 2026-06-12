@@ -15,19 +15,24 @@ def test_refresh_account_data_captures_snapshot_and_demographics(
         return "IG1"
 
     monkeypatch.setattr(fetch, "resolve_ig_account", resolve)
-    monkeypatch.setattr(
-        fetch,
-        "fetch_profile",
-        lambda u, ig_id=None: {"followers_count": 192, "media_count": 10},
-    )
-    monkeypatch.setattr(
-        fetch, "fetch_account_insights", lambda u, ig_id=None: {"reach": 379}
-    )
-    monkeypatch.setattr(
-        fetch,
-        "fetch_demographics",
-        lambda u, ig_id=None: {"gender": {"F": 100, "M": 87}, "age": {}, "country": {}, "city": {}},
-    )
+
+    # Cada bajada debe recibir el ig_id resuelto ("IG1"), no None: confirma que
+    # refresh_account_data propaga la cuenta resuelta a snapshot + demografía.
+    def _profile(u, ig_id=None):
+        assert ig_id == "IG1"
+        return {"followers_count": 192, "media_count": 10}
+
+    def _account(u, ig_id=None):
+        assert ig_id == "IG1"
+        return {"reach": 379}
+
+    def _demographics(u, ig_id=None):
+        assert ig_id == "IG1"
+        return {"gender": {"F": 100, "M": 87}, "age": {}, "country": {}, "city": {}}
+
+    monkeypatch.setattr(fetch, "fetch_profile", _profile)
+    monkeypatch.setattr(fetch, "fetch_account_insights", _account)
+    monkeypatch.setattr(fetch, "fetch_demographics", _demographics)
 
     with inited_app.app_context():
         service.refresh_account_data(user)

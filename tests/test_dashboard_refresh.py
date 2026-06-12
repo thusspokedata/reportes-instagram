@@ -49,6 +49,7 @@ def test_actualizar_success_persists(user_factory, inited_app, monkeypatch):
     response = client.post("/actualizar")
 
     assert response.status_code == 302  # redirige al dashboard
+    assert "/dashboard" in response.headers["Location"]
     with inited_app.app_context():
         db = get_db()
         snap = db.execute(
@@ -73,6 +74,7 @@ def test_actualizar_allows_same_origin(user_factory, inited_app, monkeypatch):
     response = client.post("/actualizar", headers={"Origin": "http://localhost"})
 
     assert response.status_code == 302
+    assert "/dashboard" in response.headers["Location"]
 
 
 def test_actualizar_degrades_on_rate_limit(user_factory, inited_app, monkeypatch):
@@ -87,8 +89,10 @@ def test_actualizar_degrades_on_rate_limit(user_factory, inited_app, monkeypatch
 
     response = client.post("/actualizar", follow_redirects=True)
 
-    # No rompe: vuelve al dashboard con un aviso, sin 500.
+    # No rompe: vuelve al dashboard (botón presente) con un flash de error, sin 500.
     assert response.status_code == 200
+    assert b"Actualizar datos" in response.data
+    assert b"flash-error" in response.data
 
 
 def test_actualizar_degrades_on_insights_error(user_factory, inited_app, monkeypatch):
@@ -104,3 +108,5 @@ def test_actualizar_degrades_on_insights_error(user_factory, inited_app, monkeyp
     response = client.post("/actualizar", follow_redirects=True)
 
     assert response.status_code == 200
+    assert b"Actualizar datos" in response.data
+    assert b"flash-error" in response.data
