@@ -69,6 +69,22 @@
       </span>
     </div>
     <div class="card">
+      <span class="card-label">Visitas al perfil (día)</span>
+      <span class="card-value">
+        {%- if data.summary.profile_views is not none -%}
+          {{ data.summary.profile_views }}
+        {%- else -%}<span class="nodata">sin dato</span>{%- endif -%}
+      </span>
+    </div>
+    <div class="card">
+      <span class="card-label">Clics al sitio web (día)</span>
+      <span class="card-value">
+        {%- if data.summary.website_clicks is not none -%}
+          {{ data.summary.website_clicks }}
+        {%- else -%}<span class="nodata">sin dato</span>{%- endif -%}
+      </span>
+    </div>
+    <div class="card">
       <span class="card-label">Posts</span>
       <span class="card-value">{{ data.summary.posts }}</span>
     </div>
@@ -129,6 +145,10 @@
       <canvas id="chart-reach-type" height="120"></canvas>
     {% else %}
       <p class="empty">Sin datos por tipo todavía.</p>
+    {% endif %}
+    {% if data.reels and data.reels.median_watch_s is not none %}
+      <p class="medians">Reels: tiempo de visualización mediano
+        {{ data.reels.median_watch_s }} s (n={{ data.reels.n }}).</p>
     {% endif %}
   </section>
 

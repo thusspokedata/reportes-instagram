@@ -64,6 +64,13 @@ def test_median_ignores_none():
     assert _median([]) is None
 
 
+def test_median_ignores_non_numeric_garbage():
+    # SQLite es de tipado dinámico: si llegara un no-número desde Meta, se
+    # ignora como un NULL en vez de romper la aritmética.
+    assert _median(["garbage", 5, 15]) == 10
+    assert _median(["a", "b"]) is None
+
+
 def test_build_summary_and_medians():
     snapshot = {
         "follower_count": 147,
@@ -130,6 +137,42 @@ def test_enough_sample_true_at_threshold():
     assert data["enough_sample"] is True
 
 
+def test_build_summary_includes_profile_views_and_clicks():
+    snapshot = {
+        "follower_count": 196,
+        "reach": 109,
+        "profile_views": 17,
+        "website_clicks": 2,
+        "snapshot_date": "2026-06-12",
+    }
+    data = build_dashboard_data(snapshot, [])
+    assert data["summary"]["profile_views"] == 17
+    assert data["summary"]["website_clicks"] == 2
+    # Snapshot viejo sin las columnas -> None (no rompe, no 0).
+    assert build_dashboard_data({"follower_count": 1}, [])["summary"]["profile_views"] is None
+
+
+def test_build_reels_watch_median_only_videos_in_seconds():
+    posts = [
+        dict(_post("V1", "VIDEO", reach=1), avg_watch_time_ms=6585),
+        dict(_post("V2", "VIDEO", reach=1), avg_watch_time_ms=4000),
+        dict(_post("V3", "VIDEO", reach=1), avg_watch_time_ms=None),  # NULL ignorado
+        dict(_post("I1", "IMAGE", reach=1), avg_watch_time_ms=None),
+    ]
+    data = build_dashboard_data(None, posts)
+    # mediana(6585, 4000) = 5292.5 ms -> 5.3 s; n = videos con dato real.
+    assert data["reels"]["median_watch_s"] == 5.3
+    assert data["reels"]["n"] == 2
+
+
+def test_build_reels_watch_none_without_data():
+    posts = [_post("I1", "IMAGE", reach=1)]
+    data = build_dashboard_data(None, posts)
+    # Sin videos con dato: None (sin dato), nunca 0.
+    assert data["reels"]["median_watch_s"] is None
+    assert data["reels"]["n"] == 0
+
+
 # --- ruta ----------------------------------------------------------------
 
 def test_dashboard_requires_session(inited_app):
@@ -176,9 +219,10 @@ def test_dashboard_renders_new_account_metric_cards(user_factory, inited_app):
         db = get_db()
         db.execute(
             "INSERT INTO account_snapshots (user_id, snapshot_date, follower_count,"
-            " reach, views, accounts_engaged, total_interactions)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (user["id"], "2026-06-12", 193, 105, 777, 88, 222),
+            " reach, views, accounts_engaged, total_interactions, profile_views,"
+            " website_clicks)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (user["id"], "2026-06-12", 193, 105, 777, 88, 222, 17, 3),
         )
         db.commit()
     client = inited_app.test_client()
@@ -192,6 +236,8 @@ def test_dashboard_renders_new_account_metric_cards(user_factory, inited_app):
     assert b"Vistas del d" in response.data and b"777" in response.data
     assert b"Interacciones del d" in response.data and b"222" in response.data
     assert b"Cuentas que interactuaron" in response.data and b"88" in response.data
+    assert b"Visitas al perfil" in response.data and b"17" in response.data
+    assert b"Clics al sitio web" in response.data
 
 
 def test_dashboard_does_not_leak_other_users_data(user_factory, inited_app):
