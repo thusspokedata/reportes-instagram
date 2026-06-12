@@ -45,6 +45,30 @@
       </span>
     </div>
     <div class="card">
+      <span class="card-label">Vistas del día</span>
+      <span class="card-value">
+        {%- if data.summary.views is not none -%}
+          {{ data.summary.views }}
+        {%- else -%}<span class="nodata">sin dato</span>{%- endif -%}
+      </span>
+    </div>
+    <div class="card">
+      <span class="card-label">Interacciones del día</span>
+      <span class="card-value">
+        {%- if data.summary.interactions is not none -%}
+          {{ data.summary.interactions }}
+        {%- else -%}<span class="nodata">sin dato</span>{%- endif -%}
+      </span>
+    </div>
+    <div class="card">
+      <span class="card-label">Cuentas que interactuaron</span>
+      <span class="card-value">
+        {%- if data.summary.accounts_engaged is not none -%}
+          {{ data.summary.accounts_engaged }}
+        {%- else -%}<span class="nodata">sin dato</span>{%- endif -%}
+      </span>
+    </div>
+    <div class="card">
       <span class="card-label">Posts</span>
       <span class="card-value">{{ data.summary.posts }}</span>
     </div>
@@ -66,6 +90,18 @@
         {%- else %} <span class="nodata">sin dato</span>{% endif %};
         reach:
         {%- if data.medians.reach is not none %} {{ data.medians.reach }}
+        {%- else %} <span class="nodata">sin dato</span>{% endif %};
+        vistas:
+        {%- if data.medians.views is not none %} {{ data.medians.views }}
+        {%- else %} <span class="nodata">sin dato</span>{% endif %};
+        guardados:
+        {%- if data.medians.saved is not none %} {{ data.medians.saved }}
+        {%- else %} <span class="nodata">sin dato</span>{% endif %};
+        compartidos:
+        {%- if data.medians.shares is not none %} {{ data.medians.shares }}
+        {%- else %} <span class="nodata">sin dato</span>{% endif %};
+        interacciones:
+        {%- if data.medians.interactions is not none %} {{ data.medians.interactions }}
         {%- else %} <span class="nodata">sin dato</span>{% endif %}.
       </p>
       <canvas id="chart-engagement" height="120"></canvas>

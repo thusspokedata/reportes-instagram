@@ -45,6 +45,28 @@ hoy; se priorizan cuando corresponda. Cada ítem indica su origen.
   - Origen: SPEC 07 (revisión interna, M3).
   - Esfuerzo: bajo.
 
+- **El reporte mensual usa datos ACTUALES, no del mes etiquetado.**
+  `generate-monthly-report` arma el texto con `build_report_input`, que lee el
+  estado actual de la base (snapshot de hoy + todos los posts + demografía
+  actual), no un agregado acotado al mes. O sea, el reporte "2026-05" describe
+  la foto del día en que corre, no la actividad de mayo. Funciona como foto de
+  cadencia mensual, pero para un análisis realmente del mes haría falta:
+  filtrar posts por rango de fechas, calcular el crecimiento del mes desde la
+  serie de `account_snapshots`, y pasarle esa serie al modelo.
+  - Archivo: `app/reports/generate.py` (`build_report_input`).
+  - Origen: SPEC 07 (verificación en producción).
+  - Esfuerzo: medio.
+
+- **"Mejor día/horario para publicar" — bloqueado por datos de Meta.**
+  El insight `online_followers` (seguidores online por hora) responde pero viene
+  VACÍO (`value: {}`) para esta cuenta — Meta no da la distribución horaria
+  (depende del tamaño de audiencia). Y con ~12 posts, inferir el horario desde
+  los propios posts sería poco confiable (N chico). Revisar cuando la cuenta
+  crezca. Alternativa futura: `reached_audience_demographics` /
+  `engaged_audience_demographics` (requieren parámetro `timeframe`).
+  - Origen: SPEC "más métricas" (sonda contra la cuenta real).
+  - Esfuerzo: medio (cuando haya datos).
+
 ## Plataforma / deuda técnica
 
 - **Converters deprecados de sqlite3 (Python 3.12).**
