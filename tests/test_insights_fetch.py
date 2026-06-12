@@ -50,11 +50,14 @@ def test_account_fetch_is_defensive(app_ctx, monkeypatch):
 def test_account_insights_excludes_follower_count(app_ctx, monkeypatch):
     # follower_count NO se pide a insights (sale del perfil). El extractor de
     # la métrica de insights nunca debe terminar escribiendo follower_count.
+    expected = {"reach", "views", "accounts_engaged", "total_interactions"}
+
     def fake(path, params, token):
         if path == "me/accounts":
             return {"data": [{"instagram_business_account": {"id": "IG1"}}]}
-        assert params.get("metric") == "reach"  # sólo reach a insights
-        return {"data": [{"name": "reach", "total_value": {"value": 50}}]}
+        m = params.get("metric")
+        assert m in expected  # follower_count NUNCA se pide a insights
+        return {"data": [{"name": m, "total_value": {"value": 50}}]}
 
     monkeypatch.setattr(fetch, "_graph_get", fake)
 
@@ -62,6 +65,36 @@ def test_account_insights_excludes_follower_count(app_ctx, monkeypatch):
 
     assert result["reach"] == 50
     assert "follower_count" not in result
+
+
+def test_account_insights_fetches_extended_metrics(app_ctx, monkeypatch):
+    values = {"reach": 100, "views": 800, "accounts_engaged": 40, "total_interactions": 120}
+
+    def fake(path, params, token):
+        if path == "me/accounts":
+            return {"data": [{"instagram_business_account": {"id": "IG1"}}]}
+        m = params["metric"]
+        return {"data": [{"name": m, "total_value": {"value": values[m]}}]}
+
+    monkeypatch.setattr(fetch, "_graph_get", fake)
+
+    result = fetch.fetch_account_insights(_user(), ig_id="IG1")
+
+    assert result == values
+
+
+def test_media_insights_fetches_extended_metrics(app_ctx, monkeypatch):
+    values = {"reach": 100, "views": 250, "saved": 5, "shares": 3, "total_interactions": 40}
+
+    def fake(path, params, token):
+        m = params["metric"]
+        return {"data": [{"name": m, "values": [{"value": values[m]}]}]}
+
+    monkeypatch.setattr(fetch, "_graph_get", fake)
+
+    insights = fetch.fetch_media_insights(_user(), "M1", "VIDEO")
+
+    assert insights == values
 
 
 def test_account_fetch_skips_resolution_when_ig_id_passed(app_ctx, monkeypatch):
@@ -263,12 +296,19 @@ def test_normalize_post_maps_fields():
         "like_count": 5,
         "comments_count": 2,
     }
-    post = fetch.normalize_post(media, {"reach": 33})
+    post = fetch.normalize_post(
+        media,
+        {"reach": 33, "views": 80, "saved": 4, "shares": 2, "total_interactions": 39},
+    )
 
     assert post["media_id"] == "M1"
     assert post["likes"] == 5
     assert post["comments"] == 2
     assert post["reach"] == 33
+    assert post["views"] == 80
+    assert post["saved"] == 4
+    assert post["shares"] == 2
+    assert post["total_interactions"] == 39
 
 
 # --- low-level HTTP error handling ---------------------------------------

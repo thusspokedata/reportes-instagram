@@ -176,12 +176,13 @@ def generate_and_save_report(user, *, period_label, api_key, model, client=None)
     db = get_db()
     user_id = user["id"]
     snapshot = db.execute(
-        "SELECT follower_count, reach FROM account_snapshots"
-        " WHERE user_id = ? ORDER BY snapshot_date DESC LIMIT 1",
+        "SELECT follower_count, reach, views, accounts_engaged, total_interactions"
+        " FROM account_snapshots WHERE user_id = ? ORDER BY snapshot_date DESC LIMIT 1",
         (user_id,),
     ).fetchone()
     posts = db.execute(
-        "SELECT media_id, media_type, timestamp, likes, comments, reach"
+        "SELECT media_id, media_type, timestamp, likes, comments, reach, views,"
+        " saved, shares, total_interactions"
         " FROM post_metrics WHERE user_id = ? ORDER BY timestamp",
         (user_id,),
     ).fetchall()

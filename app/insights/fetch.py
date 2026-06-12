@@ -29,16 +29,23 @@ _RATE_LIMIT_CODES = {4, 17, 32, 613}
 # de NUEVOS seguidores por period y devuelve vacío (no 0) si no hay datos; no es
 # el total. El conteo actual de seguidores se lee del FIELD del perfil
 # `followers_count` (con "s") en fetch_profile().
+# Todas se piden con period=day + metric_type=total_value (verificado contra la
+# cuenta real en v23). Cada una se pide por separado: si Meta deja de exponer
+# alguna, se saltea (queda None) sin tirar abajo el resto.
 ACCOUNT_METRICS = (
     ("reach", {"period": "day", "metric_type": "total_value"}),
+    ("views", {"period": "day", "metric_type": "total_value"}),
+    ("accounts_engaged", {"period": "day", "metric_type": "total_value"}),
+    ("total_interactions", {"period": "day", "metric_type": "total_value"}),
 )
 # Fields del perfil del IG user (conteos actuales, en tiempo real).
 PROFILE_FIELDS = "followers_count,media_count,username"
 # Cortes de demografía de audiencia (insight follower_demographics, ≥100 seg.).
 DEMOGRAPHICS_BREAKDOWNS = ("gender", "age", "country", "city")
 # Métricas de POST que se piden como insights. likes/comments NO van acá:
-# se leen como fields del media object (like_count, comments_count).
-MEDIA_INSIGHT_METRICS = ("reach",)
+# se leen como fields del media object (like_count, comments_count). Verificadas
+# disponibles para IMAGE/VIDEO/CAROUSEL en v23; cada una es defensiva.
+MEDIA_INSIGHT_METRICS = ("reach", "views", "saved", "shares", "total_interactions")
 MEDIA_FIELDS = "id,media_type,permalink,caption,timestamp,like_count,comments_count"
 # Tope de seguridad de páginas al paginar media (rate limit ~200/h).
 _MAX_MEDIA_PAGES = 25
@@ -273,7 +280,11 @@ def fetch_media_list(user, ig_id=None) -> list:
 
 
 def fetch_media_insights(user, media_id, media_type=None) -> dict:
-    """Baja, de forma defensiva, las métricas de insights de un post."""
+    """Baja, de forma defensiva, las métricas de insights de un post.
+
+    Costo: una llamada por métrica, así que escala 5×N posts en fetch-insights
+    (presupuesto de Meta ~200/h). Tenerlo en cuenta al sumar más métricas.
+    """
     token = decrypt_token(user["access_token_cifrado"])
     result = {}
     for name in MEDIA_INSIGHT_METRICS:

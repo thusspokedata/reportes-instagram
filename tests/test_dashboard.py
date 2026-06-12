@@ -25,7 +25,18 @@ def _drow(breakdown, bucket, value):
     return {"breakdown": breakdown, "bucket": bucket, "value": value}
 
 
-def _post(media_id="M1", media_type="IMAGE", likes=0, comments=0, reach=0, timestamp=None):
+def _post(
+    media_id="M1",
+    media_type="IMAGE",
+    likes=0,
+    comments=0,
+    reach=0,
+    timestamp=None,
+    views=None,
+    saved=None,
+    shares=None,
+    total_interactions=None,
+):
     return {
         "media_id": media_id,
         "media_type": media_type,
@@ -35,6 +46,10 @@ def _post(media_id="M1", media_type="IMAGE", likes=0, comments=0, reach=0, times
         "likes": likes,
         "comments": comments,
         "reach": reach,
+        "views": views,
+        "saved": saved,
+        "shares": shares,
+        "total_interactions": total_interactions,
     }
 
 
@@ -50,16 +65,32 @@ def test_median_ignores_none():
 
 
 def test_build_summary_and_medians():
-    snapshot = {"follower_count": 147, "reach": 228, "views": None, "snapshot_date": "2026-06-03"}
+    snapshot = {
+        "follower_count": 147,
+        "reach": 228,
+        "views": 500,
+        "total_interactions": 40,
+        "accounts_engaged": 30,
+        "snapshot_date": "2026-06-03",
+    }
     posts = [
-        _post("M1", "IMAGE", likes=5, comments=2, reach=10),
-        _post("M2", "IMAGE", likes=15, comments=4, reach=None),  # reach NULL
+        _post("M1", "IMAGE", likes=5, comments=2, reach=10, views=20, saved=2, shares=1, total_interactions=8),
+        _post("M2", "IMAGE", likes=15, comments=4, reach=None, views=40, saved=4, shares=3, total_interactions=22),
     ]
     data = build_dashboard_data(snapshot, posts)
 
-    assert data["summary"] == {"followers": 147, "reach": 228, "posts": 2}
+    assert data["summary"]["followers"] == 147
+    assert data["summary"]["reach"] == 228
+    assert data["summary"]["views"] == 500
+    assert data["summary"]["interactions"] == 40
+    assert data["summary"]["accounts_engaged"] == 30
+    assert data["summary"]["posts"] == 2
     assert data["medians"]["likes"] == 10  # median(5, 15)
     assert data["medians"]["reach"] == 10  # median([10]) ignorando el None
+    assert data["medians"]["views"] == 30  # median(20, 40)
+    assert data["medians"]["saved"] == 3  # median(2, 4)
+    assert data["medians"]["shares"] == 2  # median(1, 3)
+    assert data["medians"]["interactions"] == 15  # median(8, 22)
     assert data["enough_sample"] is False  # 2 < 12
 
 
@@ -132,6 +163,35 @@ def test_dashboard_renders_for_logged_in_user(user_factory, inited_app):
 
     assert response.status_code == 200
     assert b"147" in response.data  # seguidores en la tarjeta
+    # La línea de medianas incluye las métricas nuevas (aunque sin dato aún).
+    assert b"vistas:" in response.data
+    assert b"guardados:" in response.data
+    assert b"compartidos:" in response.data
+    assert b"interacciones:" in response.data
+
+
+def test_dashboard_renders_new_account_metric_cards(user_factory, inited_app):
+    user = user_factory()
+    with inited_app.app_context():
+        db = get_db()
+        db.execute(
+            "INSERT INTO account_snapshots (user_id, snapshot_date, follower_count,"
+            " reach, views, accounts_engaged, total_interactions)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (user["id"], "2026-06-12", 193, 105, 777, 88, 222),
+        )
+        db.commit()
+    client = inited_app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = user["id"]
+        sess["logged_in"] = True
+
+    response = client.get("/dashboard")
+
+    assert response.status_code == 200
+    assert b"Vistas del d" in response.data and b"777" in response.data
+    assert b"Interacciones del d" in response.data and b"222" in response.data
+    assert b"Cuentas que interactuaron" in response.data and b"88" in response.data
 
 
 def test_dashboard_does_not_leak_other_users_data(user_factory, inited_app):

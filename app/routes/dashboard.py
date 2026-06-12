@@ -54,6 +54,15 @@ def _median(values):
     return median(nums)
 
 
+def _row_val(row, key):
+    """Lee una columna de un sqlite3.Row o dict tolerando que no exista (-> None).
+
+    Permite ampliar las métricas sin romper si un row no trae la columna (ej.
+    snapshots/posts de tests que no la incluyen). NULL se preserva como None.
+    """
+    return row[key] if row is not None and key in row.keys() else None
+
+
 def _post_label(post):
     """Etiqueta corta para el eje X: fecha del post o sufijo del media_id."""
     ts = post["timestamp"]
@@ -92,8 +101,11 @@ def build_dashboard_data(snapshot, posts):
     ]
     return {
         "summary": {
-            "followers": snapshot["follower_count"] if snapshot else None,
-            "reach": snapshot["reach"] if snapshot else None,
+            "followers": _row_val(snapshot, "follower_count"),
+            "reach": _row_val(snapshot, "reach"),
+            "views": _row_val(snapshot, "views"),
+            "interactions": _row_val(snapshot, "total_interactions"),
+            "accounts_engaged": _row_val(snapshot, "accounts_engaged"),
             "posts": len(posts),
         },
         "engagement": engagement,
@@ -102,6 +114,10 @@ def build_dashboard_data(snapshot, posts):
             "likes": _median([p["likes"] for p in posts]),
             "comments": _median([p["comments"] for p in posts]),
             "reach": _median([p["reach"] for p in posts]),
+            "saved": _median([_row_val(p, "saved") for p in posts]),
+            "shares": _median([_row_val(p, "shares") for p in posts]),
+            "views": _median([_row_val(p, "views") for p in posts]),
+            "interactions": _median([_row_val(p, "total_interactions") for p in posts]),
         },
         "min_sample": MIN_SAMPLE,
         # Gatekeeper de lo inferencial: por debajo, nada concluyente.
@@ -188,7 +204,8 @@ def dashboard():
     # Serie completa de snapshots (ASC) para los gráficos de evolución; el
     # último elemento es el snapshot más reciente que alimenta las tarjetas.
     snapshots = db.execute(
-        "SELECT snapshot_date, follower_count, reach, views FROM account_snapshots"
+        "SELECT snapshot_date, follower_count, reach, views, accounts_engaged,"
+        " total_interactions FROM account_snapshots"
         " WHERE user_id = ? ORDER BY snapshot_date ASC",
         (user_id,),
     ).fetchall()
@@ -196,7 +213,8 @@ def dashboard():
     # Minimización de datos: sólo las columnas que el dashboard usa
     # (caption/permalink no se renderizan, no se traen).
     posts = db.execute(
-        "SELECT media_id, media_type, timestamp, likes, comments, reach"
+        "SELECT media_id, media_type, timestamp, likes, comments, reach, views,"
+        " saved, shares, total_interactions"
         " FROM post_metrics WHERE user_id = ? ORDER BY timestamp",
         (user_id,),
     ).fetchall()
