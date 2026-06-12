@@ -15,22 +15,9 @@ from flask.cli import with_appcontext
 
 from . import fetch
 from .fetch import InsightsError, RateLimitError
-from .store import save_account_snapshot, save_demographics, save_post_metrics
+from .service import capture_account_snapshot
+from .store import save_demographics, save_post_metrics
 from ..db import get_db
-
-
-def _capture_account_snapshot(user, ig_id):
-    """Baja seguidores (perfil) + insights de cuenta y guarda el snapshot del día.
-
-    Idempotente por ``(user_id, snapshot_date)``. Devuelve el perfil (para
-    validar media_count en la bajada completa). Compartido por ambos comandos.
-    """
-    profile = fetch.fetch_profile(user, ig_id)
-    account = fetch.fetch_account_insights(user, ig_id)
-    # Seguidores del perfil (no de la métrica de insights, que es un delta).
-    account["follower_count"] = profile.get("followers_count")
-    save_account_snapshot(user, account)
-    return profile
 
 
 @click.command("fetch-insights")
@@ -45,7 +32,7 @@ def fetch_insights_command():
         try:
             # Resolver la cuenta IG una sola vez por usuaria (rate limit).
             ig_id = fetch.resolve_ig_account(user)
-            profile = _capture_account_snapshot(user, ig_id)
+            profile = capture_account_snapshot(user, ig_id)
 
             posts = []
             for media in fetch.fetch_media_list(user, ig_id):
@@ -88,7 +75,7 @@ def daily_snapshot_command():
     for user in users:
         try:
             ig_id = fetch.resolve_ig_account(user)
-            profile = _capture_account_snapshot(user, ig_id)
+            profile = capture_account_snapshot(user, ig_id)
             click.echo(
                 f"OK snapshot usuaria {user['id']}: "
                 f"followers={profile.get('followers_count')}"
