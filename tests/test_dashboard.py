@@ -222,7 +222,7 @@ def test_dashboard_renders_new_account_metric_cards(user_factory, inited_app):
             " reach, views, accounts_engaged, total_interactions, profile_views,"
             " website_clicks)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (user["id"], "2026-06-12", 193, 105, 777, 88, 222, 17, 3),
+            (user["id"], "2026-06-12", 193, 105, 777, 88, 222, 17, 31),
         )
         db.commit()
     client = inited_app.test_client()
@@ -237,7 +237,8 @@ def test_dashboard_renders_new_account_metric_cards(user_factory, inited_app):
     assert b"Interacciones del d" in response.data and b"222" in response.data
     assert b"Cuentas que interactuaron" in response.data and b"88" in response.data
     assert b"Visitas al perfil" in response.data and b"17" in response.data
-    assert b"Clics al sitio web" in response.data
+    # 31 es distintivo (un "3" pelado matchearía dentro de "193").
+    assert b"Clics al sitio web" in response.data and b"31" in response.data
 
 
 def test_dashboard_does_not_leak_other_users_data(user_factory, inited_app):

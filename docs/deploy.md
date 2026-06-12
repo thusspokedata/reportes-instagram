@@ -96,5 +96,5 @@ sudo systemctl restart reportes
 
 `init-db` es **parte estándar del re-deploy**: además de crear tablas nuevas
 (`CREATE TABLE IF NOT EXISTS`), aplica las migraciones de columnas (`ALTER
-TABLE` idempotente). No toca datos existentes. Saltearlo cuando una release
-agrega columnas rompe la app (`no such column`).
+TABLE` idempotente). No toca datos existentes. Omitirlo cuando una release
+agrega columnas causa errores de `no such column`.
