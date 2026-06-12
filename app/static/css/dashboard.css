@@ -104,3 +104,62 @@ body {
   margin: 0 0 0.5rem;
   color: var(--muted);
 }
+
+/* Barra de acciones (Actualizar datos) */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+.toolbar .note { margin: 0; }
+
+/* Botones de acción */
+.btn-refresh,
+.btn-report {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.55rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-refresh:hover,
+.btn-report:hover { background: #2f49b0; }
+
+/* Avisos (flash) */
+.flashes { list-style: none; padding: 0; margin: 0 0 1.25rem; }
+.flash {
+  border-radius: 8px;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.9rem;
+  border: 1px solid var(--line);
+}
+.flash-ok { background: #ecfdf5; border-color: #a7f3d0; color: #065f46; }
+.flash-error { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+
+/* Reporte de texto */
+.reports form { margin-bottom: 1rem; }
+.report {
+  border-top: 1px solid var(--line);
+  padding-top: 0.9rem;
+  margin-top: 0.9rem;
+}
+.report h3 { font-size: 0.95rem; margin: 0 0 0.5rem; font-weight: 600; }
+.report-meta { color: var(--muted); font-weight: 400; font-size: 0.8rem; }
+.report-content {
+  /* pre-wrap: respeta los saltos de párrafo del modelo y además envuelve el
+     texto largo (un <pre> normal se desbordaría horizontalmente). */
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: inherit;
+  font-size: 0.92rem;
+  color: var(--ink);
+  background: #f8f9fb;
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  margin: 0;
+}

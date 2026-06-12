@@ -27,6 +27,8 @@ from flask import (
 )
 
 from ..db import get_db
+from ..insights import service as insights_service
+from ..insights.fetch import InsightsError, RateLimitError
 from ..reports import generate as reports_generate
 from ..reports.store import latest_reports
 
@@ -210,6 +212,36 @@ def dashboard():
 
     reports = latest_reports(user_id)
     return render_template("dashboard.html", data=data, reports=reports)
+
+
+@bp.route("/actualizar", methods=["POST"])
+def actualizar_datos():
+    """Refresca el snapshot del día (seguidores/reach) + la demografía desde
+    Meta, a pedido. Mismas defensas que /reporte: sesión + same-origin. Es
+    liviano (no re-baja los posts). Degradación defensiva ante el rate limit o
+    fallos de Meta: avisa con un flash y no rompe.
+    """
+    user_id = session.get("user_id")
+    if not session.get("logged_in") or not user_id:
+        return redirect(url_for("auth.login"))
+
+    if not _same_origin_request():
+        abort(403)
+
+    user = get_db().execute(
+        "SELECT * FROM usuarias WHERE id = ?", (user_id,)
+    ).fetchone()
+    if user is None:
+        return redirect(url_for("auth.login"))
+
+    try:
+        insights_service.refresh_account_data(user)
+        flash("Datos actualizados.", "ok")
+    except RateLimitError:
+        flash("Meta limitó las solicitudes; probá de nuevo en un rato.", "error")
+    except InsightsError:
+        flash("No se pudieron actualizar los datos ahora mismo.", "error")
+    return redirect(url_for("dashboard.dashboard"))
 
 
 def _same_origin_request():

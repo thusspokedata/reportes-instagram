@@ -17,6 +17,15 @@
     {% endif %}
   {% endwith %}
 
+  {# ---- Actualizar datos a pedido (snapshot del día + demografía) ---- #}
+  <section class="toolbar">
+    <form method="post" action="{{ url_for('dashboard.actualizar_datos') }}">
+      <button type="submit" class="btn-refresh">Actualizar datos</button>
+    </form>
+    <p class="note">Trae seguidores/reach del día y la demografía desde Meta.
+      Los posts se actualizan aparte.</p>
+  </section>
+
   {# ---- Resumen de cuenta (tarjetas). NULL -> "sin dato", nunca 0. ---- #}
   <section class="cards" aria-label="Resumen de cuenta">
     <div class="card">
