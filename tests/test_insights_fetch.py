@@ -50,11 +50,21 @@ def test_account_fetch_is_defensive(app_ctx, monkeypatch):
 def test_account_insights_excludes_follower_count(app_ctx, monkeypatch):
     # follower_count NO se pide a insights (sale del perfil). El extractor de
     # la métrica de insights nunca debe terminar escribiendo follower_count.
+    expected = {
+        "reach",
+        "views",
+        "accounts_engaged",
+        "total_interactions",
+        "profile_views",
+        "website_clicks",
+    }
+
     def fake(path, params, token):
         if path == "me/accounts":
             return {"data": [{"instagram_business_account": {"id": "IG1"}}]}
-        assert params.get("metric") == "reach"  # sólo reach a insights
-        return {"data": [{"name": "reach", "total_value": {"value": 50}}]}
+        m = params.get("metric")
+        assert m in expected  # follower_count NUNCA se pide a insights
+        return {"data": [{"name": m, "total_value": {"value": 50}}]}
 
     monkeypatch.setattr(fetch, "_graph_get", fake)
 
@@ -62,6 +72,71 @@ def test_account_insights_excludes_follower_count(app_ctx, monkeypatch):
 
     assert result["reach"] == 50
     assert "follower_count" not in result
+
+
+def test_account_insights_fetches_extended_metrics(app_ctx, monkeypatch):
+    values = {
+        "reach": 100,
+        "views": 800,
+        "accounts_engaged": 40,
+        "total_interactions": 120,
+        "profile_views": 17,
+        "website_clicks": 2,
+    }
+
+    def fake(path, params, token):
+        if path == "me/accounts":
+            return {"data": [{"instagram_business_account": {"id": "IG1"}}]}
+        m = params["metric"]
+        return {"data": [{"name": m, "total_value": {"value": values[m]}}]}
+
+    monkeypatch.setattr(fetch, "_graph_get", fake)
+
+    result = fetch.fetch_account_insights(_user(), ig_id="IG1")
+
+    assert result == values
+
+
+def test_media_insights_fetches_extended_metrics(app_ctx, monkeypatch):
+    values = {"reach": 100, "views": 250, "saved": 5, "shares": 3, "total_interactions": 40}
+
+    def fake(path, params, token):
+        m = params["metric"]
+        return {"data": [{"name": m, "values": [{"value": values[m]}]}]}
+
+    monkeypatch.setattr(fetch, "_graph_get", fake)
+
+    # IMAGE: sólo las métricas comunes (sin las de Reels).
+    insights = fetch.fetch_media_insights(_user(), "M1", "IMAGE")
+
+    assert insights == values
+
+
+def test_media_insights_requests_reels_metrics_only_for_video(app_ctx, monkeypatch):
+    calls = []
+
+    def fake(path, params, token):
+        calls.append(params["metric"])
+        return {"data": [{"name": params["metric"], "values": [{"value": 6585}]}]}
+
+    monkeypatch.setattr(fetch, "_graph_get", fake)
+
+    # IMAGE / CAROUSEL: las métricas de Reels NO se piden (Meta las rechaza y
+    # sería gastar rate limit a sabiendas).
+    fetch.fetch_media_insights(_user(), "M1", "IMAGE")
+    assert "ig_reels_avg_watch_time" not in calls
+    fetch.fetch_media_insights(_user(), "M2", "CAROUSEL_ALBUM")
+    assert "ig_reels_avg_watch_time" not in calls
+    # media_type ausente (None): tampoco se piden.
+    fetch.fetch_media_insights(_user(), "M2b", None)
+    assert "ig_reels_avg_watch_time" not in calls
+
+    # VIDEO (Reel): sí se piden, y caen en el resultado.
+    calls.clear()
+    result = fetch.fetch_media_insights(_user(), "M3", "VIDEO")
+    assert "ig_reels_avg_watch_time" in calls
+    assert "ig_reels_video_view_total_time" in calls
+    assert result["ig_reels_avg_watch_time"] == 6585
 
 
 def test_account_fetch_skips_resolution_when_ig_id_passed(app_ctx, monkeypatch):
@@ -263,12 +338,33 @@ def test_normalize_post_maps_fields():
         "like_count": 5,
         "comments_count": 2,
     }
-    post = fetch.normalize_post(media, {"reach": 33})
+    post = fetch.normalize_post(
+        media,
+        {"reach": 33, "views": 80, "saved": 4, "shares": 2, "total_interactions": 39},
+    )
 
     assert post["media_id"] == "M1"
     assert post["likes"] == 5
     assert post["comments"] == 2
     assert post["reach"] == 33
+    assert post["views"] == 80
+    assert post["saved"] == 4
+    assert post["shares"] == 2
+    assert post["total_interactions"] == 39
+
+
+def test_normalize_post_maps_reels_watch_time():
+    post = fetch.normalize_post(
+        {"id": "M1", "media_type": "VIDEO"},
+        {"ig_reels_avg_watch_time": 6585, "ig_reels_video_view_total_time": 1837380},
+    )
+    assert post["avg_watch_time_ms"] == 6585
+    assert post["video_view_total_time_ms"] == 1837380
+
+    # Post sin métricas de Reels (IMAGE): quedan None, nunca 0.
+    post = fetch.normalize_post({"id": "M2", "media_type": "IMAGE"}, {"reach": 5})
+    assert post["avg_watch_time_ms"] is None
+    assert post["video_view_total_time_ms"] is None
 
 
 # --- low-level HTTP error handling ---------------------------------------

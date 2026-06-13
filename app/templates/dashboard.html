@@ -17,6 +17,15 @@
     {% endif %}
   {% endwith %}
 
+  {# ---- Actualizar datos a pedido (snapshot del día + demografía) ---- #}
+  <section class="toolbar">
+    <form method="post" action="{{ url_for('dashboard.actualizar_datos') }}">
+      <button type="submit" class="btn-refresh">Actualizar datos</button>
+    </form>
+    <p class="note">Trae seguidores/reach del día y la demografía desde Meta.
+      Los posts se actualizan aparte.</p>
+  </section>
+
   {# ---- Resumen de cuenta (tarjetas). NULL -> "sin dato", nunca 0. ---- #}
   <section class="cards" aria-label="Resumen de cuenta">
     <div class="card">
@@ -32,6 +41,46 @@
       <span class="card-value">
         {%- if data.summary.reach is not none -%}
           {{ data.summary.reach }}
+        {%- else -%}<span class="nodata">sin dato</span>{%- endif -%}
+      </span>
+    </div>
+    <div class="card">
+      <span class="card-label">Vistas del día</span>
+      <span class="card-value">
+        {%- if data.summary.views is not none -%}
+          {{ data.summary.views }}
+        {%- else -%}<span class="nodata">sin dato</span>{%- endif -%}
+      </span>
+    </div>
+    <div class="card">
+      <span class="card-label">Interacciones del día</span>
+      <span class="card-value">
+        {%- if data.summary.interactions is not none -%}
+          {{ data.summary.interactions }}
+        {%- else -%}<span class="nodata">sin dato</span>{%- endif -%}
+      </span>
+    </div>
+    <div class="card">
+      <span class="card-label">Cuentas que interactuaron</span>
+      <span class="card-value">
+        {%- if data.summary.accounts_engaged is not none -%}
+          {{ data.summary.accounts_engaged }}
+        {%- else -%}<span class="nodata">sin dato</span>{%- endif -%}
+      </span>
+    </div>
+    <div class="card">
+      <span class="card-label">Visitas al perfil (día)</span>
+      <span class="card-value">
+        {%- if data.summary.profile_views is not none -%}
+          {{ data.summary.profile_views }}
+        {%- else -%}<span class="nodata">sin dato</span>{%- endif -%}
+      </span>
+    </div>
+    <div class="card">
+      <span class="card-label">Clics al sitio web (día)</span>
+      <span class="card-value">
+        {%- if data.summary.website_clicks is not none -%}
+          {{ data.summary.website_clicks }}
         {%- else -%}<span class="nodata">sin dato</span>{%- endif -%}
       </span>
     </div>
@@ -57,6 +106,18 @@
         {%- else %} <span class="nodata">sin dato</span>{% endif %};
         reach:
         {%- if data.medians.reach is not none %} {{ data.medians.reach }}
+        {%- else %} <span class="nodata">sin dato</span>{% endif %};
+        vistas:
+        {%- if data.medians.views is not none %} {{ data.medians.views }}
+        {%- else %} <span class="nodata">sin dato</span>{% endif %};
+        guardados:
+        {%- if data.medians.saved is not none %} {{ data.medians.saved }}
+        {%- else %} <span class="nodata">sin dato</span>{% endif %};
+        compartidos:
+        {%- if data.medians.shares is not none %} {{ data.medians.shares }}
+        {%- else %} <span class="nodata">sin dato</span>{% endif %};
+        interacciones:
+        {%- if data.medians.interactions is not none %} {{ data.medians.interactions }}
         {%- else %} <span class="nodata">sin dato</span>{% endif %}.
       </p>
       <canvas id="chart-engagement" height="120"></canvas>
@@ -84,6 +145,10 @@
       <canvas id="chart-reach-type" height="120"></canvas>
     {% else %}
       <p class="empty">Sin datos por tipo todavía.</p>
+    {% endif %}
+    {% if data.reels and data.reels.median_watch_s is not none %}
+      <p class="medians">Reels: tiempo de visualización mediano
+        {{ data.reels.median_watch_s }} s (n={{ data.reels.n }}).</p>
     {% endif %}
   </section>
 
@@ -118,17 +183,38 @@
     {% endif %}
   </section>
 
-  {# ---- Gráficos estructurados, aún sin datos suficientes ---- #}
-  <section class="panel placeholder">
+  {# ---- Evolución (serie temporal de snapshots diarios) ---- #}
+  <section class="panel">
     <h2>Crecimiento de seguidores</h2>
-    <p class="empty">Se completará a medida que se acumulen snapshots diarios
-      (requiere el cron de la Fase 3). No se dibuja una línea de un solo punto.</p>
+    {% if data.evolution and data.evolution.enough %}
+      <canvas id="chart-evolution-followers" height="120"></canvas>
+    {% else %}
+      <p class="empty">Se completará a medida que se acumulen snapshots diarios.
+        No se dibuja una línea de un solo punto.</p>
+    {% endif %}
   </section>
 
-  <section class="panel placeholder">
+  <section class="panel">
     <h2>Reach / vistas por día</h2>
-    <p class="empty">Se completará a medida que se acumulen snapshots diarios
-      (requiere el cron de la Fase 3).</p>
+    {% if data.evolution and data.evolution.enough %}
+      <p class="note">Reach diario. Las vistas sólo aparecen si Meta las devuelve.
+        Los días sin dato quedan vacíos, nunca en 0.</p>
+      <canvas id="chart-evolution-reach" height="120"></canvas>
+    {% else %}
+      <p class="empty">Se completará a medida que se acumulen snapshots diarios.</p>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <h2>Visitas al perfil por día</h2>
+    {% if data.evolution and data.evolution.profile_views %}
+      <p class="note">Cuántas veces se visitó tu perfil cada día. Los días sin
+        dato quedan vacíos, nunca en 0.</p>
+      <canvas id="chart-evolution-profile-views" height="120"></canvas>
+    {% else %}
+      <p class="empty">Se completará a medida que se acumulen días con visitas al
+        perfil (la métrica es más nueva que la serie; mínimo 2 días con dato).</p>
+    {% endif %}
   </section>
 
   <section class="panel placeholder">

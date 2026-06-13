@@ -29,16 +29,28 @@ _RATE_LIMIT_CODES = {4, 17, 32, 613}
 # de NUEVOS seguidores por period y devuelve vacío (no 0) si no hay datos; no es
 # el total. El conteo actual de seguidores se lee del FIELD del perfil
 # `followers_count` (con "s") en fetch_profile().
+# Todas se piden con period=day + metric_type=total_value (verificado contra la
+# cuenta real en v23). Cada una se pide por separado: si Meta deja de exponer
+# alguna, se saltea (queda None) sin tirar abajo el resto.
 ACCOUNT_METRICS = (
     ("reach", {"period": "day", "metric_type": "total_value"}),
+    ("views", {"period": "day", "metric_type": "total_value"}),
+    ("accounts_engaged", {"period": "day", "metric_type": "total_value"}),
+    ("total_interactions", {"period": "day", "metric_type": "total_value"}),
+    ("profile_views", {"period": "day", "metric_type": "total_value"}),
+    ("website_clicks", {"period": "day", "metric_type": "total_value"}),
 )
 # Fields del perfil del IG user (conteos actuales, en tiempo real).
 PROFILE_FIELDS = "followers_count,media_count,username"
 # Cortes de demografía de audiencia (insight follower_demographics, ≥100 seg.).
 DEMOGRAPHICS_BREAKDOWNS = ("gender", "age", "country", "city")
 # Métricas de POST que se piden como insights. likes/comments NO van acá:
-# se leen como fields del media object (like_count, comments_count).
-MEDIA_INSIGHT_METRICS = ("reach",)
+# se leen como fields del media object (like_count, comments_count). Verificadas
+# disponibles para IMAGE/VIDEO/CAROUSEL en v23; cada una es defensiva.
+MEDIA_INSIGHT_METRICS = ("reach", "views", "saved", "shares", "total_interactions")
+# Métricas exclusivas de Reels (en ms). Sólo se piden para media_type VIDEO:
+# Meta las rechaza en IMAGE/CAROUSEL y pedirlas igual gastaría rate limit.
+REELS_INSIGHT_METRICS = ("ig_reels_avg_watch_time", "ig_reels_video_view_total_time")
 MEDIA_FIELDS = "id,media_type,permalink,caption,timestamp,like_count,comments_count"
 # Tope de seguridad de páginas al paginar media (rate limit ~200/h).
 _MAX_MEDIA_PAGES = 25
@@ -273,10 +285,17 @@ def fetch_media_list(user, ig_id=None) -> list:
 
 
 def fetch_media_insights(user, media_id, media_type=None) -> dict:
-    """Baja, de forma defensiva, las métricas de insights de un post."""
+    """Baja, de forma defensiva, las métricas de insights de un post.
+
+    Costo: una llamada por métrica, así que escala 5xN posts (7xN en Reels) en
+    fetch-insights (presupuesto de Meta ~200/h). Tenerlo en cuenta al sumar más.
+    """
     token = decrypt_token(user["access_token_cifrado"])
+    metrics = MEDIA_INSIGHT_METRICS
+    if media_type == "VIDEO":
+        metrics = metrics + REELS_INSIGHT_METRICS
     result = {}
-    for name in MEDIA_INSIGHT_METRICS:
+    for name in metrics:
         try:
             data = _graph_get(
                 f"{media_id}/insights", {"metric": name, "period": "day"}, token
@@ -313,4 +332,7 @@ def normalize_post(media, insights: Optional[dict] = None) -> dict:
         "saved": insights.get("saved"),
         "shares": insights.get("shares"),
         "total_interactions": insights.get("total_interactions"),
+        # Sólo Reels; en otros tipos las claves no vienen -> None.
+        "avg_watch_time_ms": insights.get("ig_reels_avg_watch_time"),
+        "video_view_total_time_ms": insights.get("ig_reels_video_view_total_time"),
     }

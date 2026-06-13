@@ -22,8 +22,9 @@ def save_account_snapshot(user, data: dict, snapshot_date=None):
         """
         INSERT INTO account_snapshots
             (user_id, snapshot_date, views, reach, follower_count,
-             reposts, accounts_engaged, total_interactions)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+             reposts, accounts_engaged, total_interactions,
+             profile_views, website_clicks)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(user_id, snapshot_date) DO UPDATE SET
             views              = excluded.views,
             reach              = excluded.reach,
@@ -31,6 +32,8 @@ def save_account_snapshot(user, data: dict, snapshot_date=None):
             reposts            = excluded.reposts,
             accounts_engaged   = excluded.accounts_engaged,
             total_interactions = excluded.total_interactions,
+            profile_views      = excluded.profile_views,
+            website_clicks     = excluded.website_clicks,
             actualizado_en     = CURRENT_TIMESTAMP
         """,
         (
@@ -42,6 +45,8 @@ def save_account_snapshot(user, data: dict, snapshot_date=None):
             data.get("reposts"),
             data.get("accounts_engaged"),
             data.get("total_interactions"),
+            data.get("profile_views"),
+            data.get("website_clicks"),
         ),
     )
     db.commit()
@@ -81,8 +86,8 @@ def save_post_metrics(user, posts):
             INSERT INTO post_metrics
                 (user_id, media_id, media_type, permalink, caption, timestamp,
                  reach, views, likes, comments, saved, shares, total_interactions,
-                 fetched_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                 avg_watch_time_ms, video_view_total_time_ms, fetched_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(user_id, media_id) DO UPDATE SET
                 media_type         = excluded.media_type,
                 permalink          = excluded.permalink,
@@ -95,6 +100,8 @@ def save_post_metrics(user, posts):
                 saved              = excluded.saved,
                 shares             = excluded.shares,
                 total_interactions = excluded.total_interactions,
+                avg_watch_time_ms        = excluded.avg_watch_time_ms,
+                video_view_total_time_ms = excluded.video_view_total_time_ms,
                 fetched_at         = CURRENT_TIMESTAMP,
                 actualizado_en     = CURRENT_TIMESTAMP
             """,
@@ -112,6 +119,8 @@ def save_post_metrics(user, posts):
                 p.get("saved"),
                 p.get("shares"),
                 p.get("total_interactions"),
+                p.get("avg_watch_time_ms"),
+                p.get("video_view_total_time_ms"),
             ),
         )
     db.commit()

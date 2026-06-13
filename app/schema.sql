@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS account_snapshots (
     reposts             INTEGER,
     accounts_engaged    INTEGER,
     total_interactions  INTEGER,
+    profile_views       INTEGER,                    -- visitas al perfil (día)
+    website_clicks      INTEGER,                    -- toques al link del sitio (día)
     creado_en           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     actualizado_en      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES usuarias(id) ON DELETE CASCADE
@@ -55,6 +57,10 @@ CREATE TABLE IF NOT EXISTS post_metrics (
     saved               INTEGER,
     shares              INTEGER,
     total_interactions  INTEGER,
+    -- Sólo para Reels (VIDEO); en otros tipos queda NULL. En milisegundos, tal
+    -- cual lo manda Meta (la conversión a segundos es de presentación).
+    avg_watch_time_ms        INTEGER,               -- tiempo promedio de visualización
+    video_view_total_time_ms INTEGER,               -- tiempo total reproducido
     fetched_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,  -- última bajada
     creado_en           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     actualizado_en      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

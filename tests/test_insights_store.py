@@ -32,6 +32,80 @@ def test_save_account_snapshot_null_stays_null(user_factory, inited_app):
     assert row["follower_count"] is None
 
 
+def test_save_account_snapshot_persists_extended_metrics(user_factory, inited_app):
+    user = user_factory()
+    with inited_app.app_context():
+        save_account_snapshot(
+            user,
+            {
+                "reach": 105,
+                "views": 777,
+                "accounts_engaged": 88,
+                "total_interactions": 222,
+                "follower_count": 193,
+            },
+            "2026-06-12",
+        )
+        row = get_db().execute(
+            "SELECT views, accounts_engaged, total_interactions"
+            " FROM account_snapshots WHERE user_id = ?",
+            (user["id"],),
+        ).fetchone()
+    assert row["views"] == 777
+    assert row["accounts_engaged"] == 88
+    assert row["total_interactions"] == 222
+
+
+def test_save_post_metrics_persists_extended_metrics(user_factory, inited_app):
+    user = user_factory()
+    with inited_app.app_context():
+        save_post_metrics(
+            user,
+            [
+                {
+                    "media_id": "M1",
+                    "media_type": "VIDEO",
+                    "reach": 259,
+                    "views": 335,
+                    "saved": 4,
+                    "shares": 2,
+                    "total_interactions": 39,
+                    "avg_watch_time_ms": 6585,
+                    "video_view_total_time_ms": 1837380,
+                }
+            ],
+        )
+        row = get_db().execute(
+            "SELECT views, saved, shares, total_interactions, avg_watch_time_ms,"
+            " video_view_total_time_ms FROM post_metrics"
+            " WHERE user_id = ? AND media_id = 'M1'",
+            (user["id"],),
+        ).fetchone()
+    assert row["views"] == 335
+    assert row["saved"] == 4
+    assert row["shares"] == 2
+    assert row["total_interactions"] == 39
+    assert row["avg_watch_time_ms"] == 6585
+    assert row["video_view_total_time_ms"] == 1837380
+
+
+def test_save_account_snapshot_persists_profile_views_and_clicks(user_factory, inited_app):
+    user = user_factory()
+    with inited_app.app_context():
+        save_account_snapshot(
+            user,
+            {"reach": 109, "profile_views": 17, "website_clicks": 2},
+            "2026-06-12",
+        )
+        row = get_db().execute(
+            "SELECT profile_views, website_clicks FROM account_snapshots"
+            " WHERE user_id = ?",
+            (user["id"],),
+        ).fetchone()
+    assert row["profile_views"] == 17
+    assert row["website_clicks"] == 2
+
+
 def test_save_post_metrics_upsert_no_duplicate(user_factory, inited_app):
     user = user_factory()
     with inited_app.app_context():
