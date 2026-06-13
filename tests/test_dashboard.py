@@ -12,12 +12,13 @@ from app.routes.dashboard import (
 )
 
 
-def _snap(date, followers=None, reach=None, views=None):
+def _snap(date, followers=None, reach=None, views=None, profile_views=None):
     return {
         "snapshot_date": date,
         "follower_count": followers,
         "reach": reach,
         "views": views,
+        "profile_views": profile_views,
     }
 
 
@@ -356,6 +357,30 @@ def test_build_evolution_views_present_when_some_real():
     assert build_evolution(rows)["views"] == [None, 5]
 
 
+def test_build_evolution_profile_views_with_two_real_points():
+    rows = [
+        _snap("2026-06-10", 180, 21),  # sin visitas todavía (NULL)
+        _snap("2026-06-12", 196, 109, profile_views=17),
+        _snap("2026-06-13", 198, 80, profile_views=25),
+    ]
+    evo = build_evolution(rows)
+    # La serie completa, preservando el NULL del día sin dato (hueco, no 0).
+    assert evo["profile_views"] == [None, 17, 25]
+
+
+def test_build_evolution_profile_views_none_with_less_than_two_points():
+    # Con <2 días con dato real no se dibuja (línea de un punto = no).
+    rows = [
+        _snap("2026-06-11", 190, 50),
+        _snap("2026-06-12", 196, 109, profile_views=17),
+    ]
+    assert build_evolution(rows)["profile_views"] is None
+    # Y sin la columna (snapshots viejos), tampoco rompe.
+    assert build_evolution([{"snapshot_date": "x", "follower_count": 1, "reach": 1, "views": None}])[
+        "profile_views"
+    ] is None
+
+
 def test_build_evolution_not_enough_with_single_point():
     # Una línea de un solo punto no se dibuja.
     assert build_evolution([_snap("2026-06-03", 147, 228)])["enough"] is False
@@ -411,6 +436,68 @@ def test_dashboard_evolution_placeholder_with_one_snapshot(user_factory, inited_
     assert response.status_code == 200
     # Con 1 solo snapshot no se dibuja la evolución (se mantiene el placeholder).
     assert b"chart-evolution-followers" not in response.data
+
+
+def test_dashboard_renders_profile_views_chart_with_data(user_factory, inited_app):
+    user = user_factory()
+    with inited_app.app_context():
+        db = get_db()
+        for date, followers, pviews in [
+            ("2026-06-12", 196, 17),
+            ("2026-06-13", 198, 25),
+        ]:
+            db.execute(
+                "INSERT INTO account_snapshots"
+                " (user_id, snapshot_date, follower_count, profile_views)"
+                " VALUES (?, ?, ?, ?)",
+                (user["id"], date, followers, pviews),
+            )
+        db.commit()
+    client = inited_app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = user["id"]
+        sess["logged_in"] = True
+
+    response = client.get("/dashboard")
+
+    assert response.status_code == 200
+    assert b"chart-evolution-profile-views" in response.data
+    # La serie llega al JSON que consume Chart.js.
+    data = _dashboard_data(response.data)
+    assert data["evolution"]["profile_views"] == [17, 25]
+
+
+def test_dashboard_profile_views_placeholder_without_enough_data(
+    user_factory, inited_app
+):
+    user = user_factory()
+    with inited_app.app_context():
+        # Dos snapshots pero UNO solo con visitas: el panel queda placeholder
+        # (los otros gráficos de evolución sí se dibujan).
+        db = get_db()
+        db.execute(
+            "INSERT INTO account_snapshots"
+            " (user_id, snapshot_date, follower_count, reach) VALUES (?, ?, ?, ?)",
+            (user["id"], "2026-06-11", 190, 50),
+        )
+        db.execute(
+            "INSERT INTO account_snapshots"
+            " (user_id, snapshot_date, follower_count, reach, profile_views)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (user["id"], "2026-06-12", 196, 109, 17),
+        )
+        db.commit()
+    client = inited_app.test_client()
+    with client.session_transaction() as sess:
+        sess["user_id"] = user["id"]
+        sess["logged_in"] = True
+
+    response = client.get("/dashboard")
+
+    assert response.status_code == 200
+    assert b"chart-evolution-followers" in response.data  # evolución sí
+    assert b"chart-evolution-profile-views" not in response.data  # visitas no aún
+    assert b"Visitas al perfil por d" in response.data  # el panel existe
 
 
 def _dashboard_data(html_bytes):

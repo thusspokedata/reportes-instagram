@@ -166,6 +166,34 @@
       });
     }
 
+    var pviewsCanvas = document.getElementById("chart-evolution-profile-views");
+    if (pviewsCanvas && evo.profile_views) {
+      new Chart(pviewsCanvas, {
+        type: "line",
+        data: {
+          labels: evo.labels,
+          datasets: [
+            {
+              label: "Visitas al perfil",
+              data: evo.profile_views,
+              borderColor: "#e8590c",
+              backgroundColor: "#e8590c",
+              tension: 0.2,
+              // Los días sin dato (null) cortan la línea; no se rellena con 0.
+              spanGaps: false,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          // Conteo diario chico: anclar en 0 es honesto (a diferencia de
+          // seguidores, donde el eje desde 0 aplastaría la tendencia).
+          scales: { y: { beginAtZero: true } },
+          plugins: { legend: { position: "bottom" } },
+        },
+      });
+    }
+
     var reachEvoCanvas = document.getElementById("chart-evolution-reach");
     if (reachEvoCanvas) {
       var evoDatasets = [

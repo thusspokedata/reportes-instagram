@@ -195,14 +195,19 @@ def build_evolution(snapshots):
     """Serie temporal de la cuenta para los gráficos de evolución.
 
     ``snapshots`` son las filas ordenadas por fecha ASC (snapshot_date,
-    follower_count, reach, views). Preserva ``None`` (NULL≠0: un día sin dato
-    queda como hueco, nunca 0). Sólo se grafican los días que existen — no se
-    inventan ceros para los faltantes. ``views`` se omite (None) si ningún día
-    tiene un dato real (en muchas cuentas Meta no lo devuelve). ``enough`` es
-    True con ≥2 puntos (una línea de un solo punto no se dibuja).
+    follower_count, reach, views, profile_views). Preserva ``None`` (NULL≠0: un
+    día sin dato queda como hueco, nunca 0). Sólo se grafican los días que
+    existen — no se inventan ceros para los faltantes. ``views`` se omite
+    (None) si ningún día tiene un dato real (en muchas cuentas Meta no lo
+    devuelve). ``profile_views`` tiene su propio gate: la columna es más nueva
+    que la serie (los días previos son NULL), así que sólo se entrega con ≥2
+    días con dato real — su gráfico es una línea propia y una línea de un punto
+    no se dibuja. ``enough`` es True con ≥2 puntos.
     """
     snapshots = list(snapshots)
     views = [s["views"] for s in snapshots]
+    profile_views = [_row_val(s, "profile_views") for s in snapshots]
+    pv_real = sum(1 for v in profile_views if isinstance(v, (int, float)))
     return {
         # snapshot_date está declarado DATE: con PARSE_DECLTYPES sqlite lo
         # devuelve como datetime.date, que tojson serializaría como un string
@@ -212,6 +217,7 @@ def build_evolution(snapshots):
         "followers": [s["follower_count"] for s in snapshots],
         "reach": [s["reach"] for s in snapshots],
         "views": views if any(v is not None for v in views) else None,
+        "profile_views": profile_views if pv_real >= EVOLUTION_MIN_POINTS else None,
         "enough": len(snapshots) >= EVOLUTION_MIN_POINTS,
     }
 

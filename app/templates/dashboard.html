@@ -205,6 +205,18 @@
     {% endif %}
   </section>
 
+  <section class="panel">
+    <h2>Visitas al perfil por día</h2>
+    {% if data.evolution and data.evolution.profile_views %}
+      <p class="note">Cuántas veces se visitó tu perfil cada día. Los días sin
+        dato quedan vacíos, nunca en 0.</p>
+      <canvas id="chart-evolution-profile-views" height="120"></canvas>
+    {% else %}
+      <p class="empty">Se completará a medida que se acumulen días con visitas al
+        perfil (la métrica es más nueva que la serie; mínimo 2 días con dato).</p>
+    {% endif %}
+  </section>
+
   <section class="panel placeholder">
     <h2>Mejor día / horario para publicar</h2>
     <p class="empty">
