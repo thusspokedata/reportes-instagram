@@ -68,7 +68,18 @@ SYSTEM_PROMPT = (
     "5. La demografía es agregada, anónima y con ~48h de delay; con audiencia "
     "chica (sobre todo a nivel ciudad) puede no ser representativa. Mencionala "
     "como referencia, no como verdad absoluta. No nombres seguidores ni "
-    "personas (la API no expone identidades).\n\n"
+    "personas (la API no expone identidades).\n"
+    "6. Campos derivados (ya calculados; usalos tal cual, no los recalcules): "
+    "\"crecimiento_seguidores\" describe sólo los días CON dato — la serie "
+    "puede tener huecos y un día sin dato no es un cero ni una caída. "
+    "\"tasa_engagement_mediana_pct\" ya es un porcentaje: no inventes otros. "
+    "\"post_mayor_alcance\"/\"post_menor_alcance\" son datos descriptivos de "
+    "publicaciones individuales: mencionalos como hechos, sin inferir "
+    "estrategia de contenido a partir de un solo post — un extremo individual "
+    "NO indica qué tipo de contenido 'rinde mejor' (para comparar tipos rige la "
+    "regla 2). \"reels\" trae el tiempo "
+    "de visualización mediano en segundos con su \"n\" (aplicá la regla 2 si "
+    "ese n es chico).\n\n"
     "Formato: 2 a 4 párrafos cortos en TEXTO PLANO (sin markdown, sin viñetas, "
     "sin títulos, sin tablas). No incluyas el JSON ni código en la respuesta."
 )
@@ -82,24 +93,92 @@ class ReportError(Exception):
     """
 
 
-def build_report_input(snapshot, posts, demo_rows):
+def _growth(snapshots):
+    """Resumen del crecimiento de seguidores sobre la serie de snapshots.
+
+    Sólo cuenta los días CON dato real (los huecos no son ceros). Devuelve None
+    con menos de 2 puntos reales: no hay "crecimiento" que describir.
+    """
+    from ..routes.dashboard import _row_val
+
+    with_data = [
+        s
+        for s in snapshots
+        if isinstance(_row_val(s, "follower_count"), (int, float))
+    ]
+    if len(with_data) < 2:
+        return None
+    first, last = with_data[0], with_data[-1]
+    return {
+        "desde": str(first["snapshot_date"]),
+        "hasta": str(last["snapshot_date"]),
+        "seguidores_inicio": first["follower_count"],
+        "seguidores_fin": last["follower_count"],
+        "dias_con_dato": len(with_data),
+    }
+
+
+def _post_extreme(posts, pick):
+    """Mejor/peor post por reach, SIN identificadores (tipo + números).
+
+    ``pick`` es max o min. Sólo considera posts con reach numérico; devuelve
+    None si no hay ninguno (no se inventa un extremo).
+    """
+    with_reach = [p for p in posts if isinstance(p["reach"], (int, float))]
+    if not with_reach:
+        return None
+    post = pick(with_reach, key=lambda p: p["reach"])
+    return {
+        "tipo": post["media_type"],
+        "reach": post["reach"],
+        "likes": post["likes"],
+        "comentarios": post["comments"],
+    }
+
+
+def build_report_input(snapshots, posts, demo_rows):
     """Arma el payload AGREGADO y anónimo para el modelo.
 
-    Reutiliza los builders del dashboard para aplicar exactamente los mismos
-    guardrails (medianas ignorando NULL, NULL≠0, top-N con "Otros", gate de
-    muestra). Se EXCLUYE a propósito la lista por-post (que llevaría labels
-    derivados del media_id): a Claude sólo le llegan agregados, sin IDs.
+    ``snapshots`` es la serie completa (ASC): el último alimenta la foto del
+    día y la serie entera el bloque de crecimiento. Reutiliza los builders del
+    dashboard para aplicar exactamente los mismos guardrails (medianas
+    ignorando NULL, NULL≠0, top-N con "Otros", gate de muestra). Se EXCLUYE a
+    propósito la lista por-post (que llevaría labels derivados del media_id):
+    a Claude sólo le llegan agregados y extremos sin IDs ni captions.
     """
     # Import perezoso para evitar un ciclo con el blueprint del dashboard.
     from ..routes.dashboard import build_dashboard_data, build_demographics
 
-    data = build_dashboard_data(snapshot, posts)
+    snapshots = list(snapshots)
+    posts = list(posts)
+    data = build_dashboard_data(snapshots[-1] if snapshots else None, posts)
+    summary = data["summary"]
+
+    # Tasa de engagement mediana (% sobre seguidores), calculada ACÁ: el modelo
+    # tiene prohibido inventar porcentajes, así que se le da ya derivada. El
+    # `and followers` evita división por cero; 0 seguidores cae a None a
+    # propósito (una tasa sobre 0 no tiene sentido descriptivo).
+    med_int = data["medians"]["interactions"]
+    followers = summary["followers"]
+    engagement_pct = None
+    if isinstance(med_int, (int, float)) and isinstance(followers, (int, float)) and followers:
+        engagement_pct = round(med_int / followers * 100, 2)
+
     return {
-        "seguidores": data["summary"]["followers"],
-        "reach_ultimo_dia": data["summary"]["reach"],
-        "cantidad_posts": data["summary"]["posts"],
+        "seguidores": followers,
+        "reach_ultimo_dia": summary["reach"],
+        "vistas_ultimo_dia": summary["views"],
+        "interacciones_ultimo_dia": summary["interactions"],
+        "visitas_perfil_ultimo_dia": summary["profile_views"],
+        "clics_sitio_ultimo_dia": summary["website_clicks"],
+        "cantidad_posts": summary["posts"],
+        "crecimiento_seguidores": _growth(snapshots),
         "medianas": data["medians"],
+        "tasa_engagement_mediana_pct": engagement_pct,
         "reach_por_tipo": data["reach_by_type"],
+        "reels": data["reels"],
+        "post_mayor_alcance": _post_extreme(posts, max),
+        "post_menor_alcance": _post_extreme(posts, min),
         "muestra_suficiente": data["enough_sample"],
         "muestra_minima": data["min_sample"],
         "demografia": build_demographics(demo_rows),
@@ -175,13 +254,17 @@ def generate_and_save_report(user, *, period_label, api_key, model, client=None)
     """
     db = get_db()
     user_id = user["id"]
-    snapshot = db.execute(
-        "SELECT follower_count, reach FROM account_snapshots"
-        " WHERE user_id = ? ORDER BY snapshot_date DESC LIMIT 1",
+    # Serie completa (ASC): el último snapshot da la foto del día y la serie
+    # entera alimenta el bloque de crecimiento del reporte.
+    snapshots = db.execute(
+        "SELECT snapshot_date, follower_count, reach, views, accounts_engaged,"
+        " total_interactions, profile_views, website_clicks"
+        " FROM account_snapshots WHERE user_id = ? ORDER BY snapshot_date ASC",
         (user_id,),
-    ).fetchone()
+    ).fetchall()
     posts = db.execute(
-        "SELECT media_id, media_type, timestamp, likes, comments, reach"
+        "SELECT media_id, media_type, timestamp, likes, comments, reach, views,"
+        " saved, shares, total_interactions, avg_watch_time_ms"
         " FROM post_metrics WHERE user_id = ? ORDER BY timestamp",
         (user_id,),
     ).fetchall()
@@ -190,7 +273,7 @@ def generate_and_save_report(user, *, period_label, api_key, model, client=None)
         (user_id,),
     ).fetchall()
 
-    report_input = build_report_input(snapshot, posts, demo_rows)
+    report_input = build_report_input(snapshots, posts, demo_rows)
     text = generate_report_text(
         report_input, api_key=api_key, model=model, client=client
     )

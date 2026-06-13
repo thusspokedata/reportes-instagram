@@ -27,6 +27,8 @@ from flask import (
 )
 
 from ..db import get_db
+from ..insights import service as insights_service
+from ..insights.fetch import InsightsError, RateLimitError
 from ..reports import generate as reports_generate
 from ..reports.store import latest_reports
 
@@ -40,13 +42,30 @@ GENDER_LABELS = {"F": "Femenino", "M": "Masculino", "U": "Desconocido"}
 TOP_COUNTRIES = 8
 TOP_CITIES = 10
 
+# Mínimo de puntos para dibujar una línea de evolución (no se grafica 1 punto).
+EVOLUTION_MIN_POINTS = 2
+
 
 def _median(values):
-    """Mediana ignorando NULL (None). Devuelve None si no hay datos reales."""
-    nums = [v for v in values if v is not None]
+    """Mediana ignorando NULL (None) y basura no numérica.
+
+    SQLite es de tipado dinámico y los valores vienen de Meta: si alguna vez
+    llegara un no-número, se ignora (como un NULL) en vez de romper la
+    aritmética. Devuelve None si no quedan datos reales.
+    """
+    nums = [v for v in values if isinstance(v, (int, float))]
     if not nums:
         return None
     return median(nums)
+
+
+def _row_val(row, key):
+    """Lee una columna de un sqlite3.Row o dict tolerando que no exista (-> None).
+
+    Permite ampliar las métricas sin romper si un row no trae la columna (ej.
+    snapshots/posts de tests que no la incluyen). NULL se preserva como None.
+    """
+    return row[key] if row is not None and key in row.keys() else None
 
 
 def _post_label(post):
@@ -85,11 +104,32 @@ def build_dashboard_data(snapshot, posts):
         }
         for p in posts
     ]
+    # Tiempo de visualización de Reels (sólo VIDEO; ms -> segundos al mostrar).
+    watch_ms = _median(
+        [_row_val(p, "avg_watch_time_ms") for p in posts if p["media_type"] == "VIDEO"]
+    )
+    # Mismo criterio que _median (numérico real): n y mediana cuentan lo mismo.
+    reels_n = sum(
+        1
+        for p in posts
+        if p["media_type"] == "VIDEO"
+        and isinstance(_row_val(p, "avg_watch_time_ms"), (int, float))
+    )
+
     return {
         "summary": {
-            "followers": snapshot["follower_count"] if snapshot else None,
-            "reach": snapshot["reach"] if snapshot else None,
+            "followers": _row_val(snapshot, "follower_count"),
+            "reach": _row_val(snapshot, "reach"),
+            "views": _row_val(snapshot, "views"),
+            "interactions": _row_val(snapshot, "total_interactions"),
+            "accounts_engaged": _row_val(snapshot, "accounts_engaged"),
+            "profile_views": _row_val(snapshot, "profile_views"),
+            "website_clicks": _row_val(snapshot, "website_clicks"),
             "posts": len(posts),
+        },
+        "reels": {
+            "median_watch_s": round(watch_ms / 1000, 1) if watch_ms is not None else None,
+            "n": reels_n,
         },
         "engagement": engagement,
         "reach_by_type": _reach_by_media_type(posts),
@@ -97,6 +137,10 @@ def build_dashboard_data(snapshot, posts):
             "likes": _median([p["likes"] for p in posts]),
             "comments": _median([p["comments"] for p in posts]),
             "reach": _median([p["reach"] for p in posts]),
+            "saved": _median([_row_val(p, "saved") for p in posts]),
+            "shares": _median([_row_val(p, "shares") for p in posts]),
+            "views": _median([_row_val(p, "views") for p in posts]),
+            "interactions": _median([_row_val(p, "total_interactions") for p in posts]),
         },
         "min_sample": MIN_SAMPLE,
         # Gatekeeper de lo inferencial: por debajo, nada concluyente.
@@ -147,6 +191,37 @@ def build_demographics(rows):
     }
 
 
+def build_evolution(snapshots):
+    """Serie temporal de la cuenta para los gráficos de evolución.
+
+    ``snapshots`` son las filas ordenadas por fecha ASC (snapshot_date,
+    follower_count, reach, views, profile_views). Preserva ``None`` (NULL≠0: un
+    día sin dato queda como hueco, nunca 0). Sólo se grafican los días que
+    existen — no se inventan ceros para los faltantes. ``views`` se omite
+    (None) si ningún día tiene un dato real (en muchas cuentas Meta no lo
+    devuelve). ``profile_views`` tiene su propio gate: la columna es más nueva
+    que la serie (los días previos son NULL), así que sólo se entrega con ≥2
+    días con dato real — su gráfico es una línea propia y una línea de un punto
+    no se dibuja. ``enough`` es True con ≥2 puntos.
+    """
+    snapshots = list(snapshots)
+    views = [s["views"] for s in snapshots]
+    profile_views = [_row_val(s, "profile_views") for s in snapshots]
+    pv_real = sum(1 for v in profile_views if isinstance(v, (int, float)))
+    return {
+        # snapshot_date está declarado DATE: con PARSE_DECLTYPES sqlite lo
+        # devuelve como datetime.date, que tojson serializaría como un string
+        # HTTP feo ("Wed, 03 Jun 2026 ..."). str() lo normaliza a ISO
+        # ("2026-06-03") y es no-op si ya viene como string.
+        "labels": [str(s["snapshot_date"]) for s in snapshots],
+        "followers": [s["follower_count"] for s in snapshots],
+        "reach": [s["reach"] for s in snapshots],
+        "views": views if any(v is not None for v in views) else None,
+        "profile_views": profile_views if pv_real >= EVOLUTION_MIN_POINTS else None,
+        "enough": len(snapshots) >= EVOLUTION_MIN_POINTS,
+    }
+
+
 @bp.route("/dashboard")
 def dashboard():
     """Página del dashboard. Requiere sesión iniciada."""
@@ -155,15 +230,20 @@ def dashboard():
         return redirect(url_for("auth.login"))
 
     db = get_db()
-    snapshot = db.execute(
-        "SELECT follower_count, reach FROM account_snapshots"
-        " WHERE user_id = ? ORDER BY snapshot_date DESC LIMIT 1",
+    # Serie completa de snapshots (ASC) para los gráficos de evolución; el
+    # último elemento es el snapshot más reciente que alimenta las tarjetas.
+    snapshots = db.execute(
+        "SELECT snapshot_date, follower_count, reach, views, accounts_engaged,"
+        " total_interactions, profile_views, website_clicks FROM account_snapshots"
+        " WHERE user_id = ? ORDER BY snapshot_date ASC",
         (user_id,),
-    ).fetchone()
+    ).fetchall()
+    snapshot = snapshots[-1] if snapshots else None
     # Minimización de datos: sólo las columnas que el dashboard usa
     # (caption/permalink no se renderizan, no se traen).
     posts = db.execute(
-        "SELECT media_id, media_type, timestamp, likes, comments, reach"
+        "SELECT media_id, media_type, timestamp, likes, comments, reach, views,"
+        " saved, shares, total_interactions, avg_watch_time_ms"
         " FROM post_metrics WHERE user_id = ? ORDER BY timestamp",
         (user_id,),
     ).fetchall()
@@ -175,9 +255,40 @@ def dashboard():
 
     data = build_dashboard_data(snapshot, posts)
     data["demographics"] = build_demographics(demo_rows)
+    data["evolution"] = build_evolution(snapshots)
 
     reports = latest_reports(user_id)
     return render_template("dashboard.html", data=data, reports=reports)
+
+
+@bp.route("/actualizar", methods=["POST"])
+def actualizar_datos():
+    """Refresca el snapshot del día (seguidores/reach) + la demografía desde
+    Meta, a pedido. Mismas defensas que /reporte: sesión + same-origin. Es
+    liviano (no re-baja los posts). Degradación defensiva ante el rate limit o
+    fallos de Meta: avisa con un flash y no rompe.
+    """
+    user_id = session.get("user_id")
+    if not session.get("logged_in") or not user_id:
+        return redirect(url_for("auth.login"))
+
+    if not _same_origin_request():
+        abort(403)
+
+    user = get_db().execute(
+        "SELECT * FROM usuarias WHERE id = ?", (user_id,)
+    ).fetchone()
+    if user is None:
+        return redirect(url_for("auth.login"))
+
+    try:
+        insights_service.refresh_account_data(user)
+        flash("Datos actualizados.", "ok")
+    except RateLimitError:
+        flash("Meta limitó las solicitudes; probá de nuevo en un rato.", "error")
+    except InsightsError:
+        flash("No se pudieron actualizar los datos ahora mismo.", "error")
+    return redirect(url_for("dashboard.dashboard"))
 
 
 def _same_origin_request():

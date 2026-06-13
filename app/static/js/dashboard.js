@@ -135,4 +135,83 @@
       }
     });
   }
+
+  // --- Evolución (serie temporal de snapshots diarios) ---
+  var evo = data.evolution;
+  if (evo && evo.enough) {
+    var followersCanvas = document.getElementById("chart-evolution-followers");
+    if (followersCanvas) {
+      new Chart(followersCanvas, {
+        type: "line",
+        data: {
+          labels: evo.labels,
+          datasets: [
+            {
+              label: "Seguidores",
+              data: evo.followers,
+              borderColor: "#3b5bdb",
+              backgroundColor: "#3b5bdb",
+              tension: 0.2,
+              // Un día sin dato (null) corta la línea; no se rellena con 0.
+              spanGaps: false,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          // Seguidores no arranca en 0: forzar 0 aplastaría la tendencia.
+          scales: { y: { beginAtZero: false } },
+          plugins: { legend: { position: "bottom" } },
+        },
+      });
+    }
+
+    var pviewsCanvas = document.getElementById("chart-evolution-profile-views");
+    if (pviewsCanvas && evo.profile_views) {
+      new Chart(pviewsCanvas, {
+        type: "line",
+        data: {
+          labels: evo.labels,
+          datasets: [
+            {
+              label: "Visitas al perfil",
+              data: evo.profile_views,
+              borderColor: "#e8590c",
+              backgroundColor: "#e8590c",
+              tension: 0.2,
+              // Los días sin dato (null) cortan la línea; no se rellena con 0.
+              spanGaps: false,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          // Conteo diario chico: anclar en 0 es honesto (a diferencia de
+          // seguidores, donde el eje desde 0 aplastaría la tendencia).
+          scales: { y: { beginAtZero: true } },
+          plugins: { legend: { position: "bottom" } },
+        },
+      });
+    }
+
+    var reachEvoCanvas = document.getElementById("chart-evolution-reach");
+    if (reachEvoCanvas) {
+      var evoDatasets = [
+        { label: "Reach", data: evo.reach, backgroundColor: "#7048e8" },
+      ];
+      // Vistas: sólo si Meta las devolvió (evo.views != null).
+      if (evo.views) {
+        evoDatasets.push({
+          label: "Vistas",
+          data: evo.views,
+          backgroundColor: "#2f9e44",
+        });
+      }
+      new Chart(reachEvoCanvas, {
+        type: "bar",
+        data: { labels: evo.labels, datasets: evoDatasets },
+        options: baseOptions,
+      });
+    }
+  }
 })();
