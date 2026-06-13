@@ -16,6 +16,9 @@
 
   var baseOptions = {
     responsive: true,
+    // El alto lo fija el .chart-box (no el ancho): evita que el gráfico se
+    // aplaste en pantallas angostas.
+    maintainAspectRatio: false,
     scales: { y: { beginAtZero: true } },
     plugins: { legend: { position: "bottom" } },
   };
@@ -159,6 +162,7 @@
         },
         options: {
           responsive: true,
+          maintainAspectRatio: false,
           // Seguidores no arranca en 0: forzar 0 aplastaría la tendencia.
           scales: { y: { beginAtZero: false } },
           plugins: { legend: { position: "bottom" } },
@@ -186,6 +190,7 @@
         },
         options: {
           responsive: true,
+          maintainAspectRatio: false,
           // Conteo diario chico: anclar en 0 es honesto (a diferencia de
           // seguidores, donde el eje desde 0 aplastaría la tendencia).
           scales: { y: { beginAtZero: true } },
