@@ -71,6 +71,13 @@ body {
 }
 
 .panel h2 { font-size: 1.05rem; margin: 0 0 0.4rem; font-weight: 600; }
+
+/* Contenedor de gráfico con altura FIJA. Chart.js corre con
+   maintainAspectRatio:false y toma el alto de este contenedor (no del ancho),
+   así no se aplasta en pantallas angostas. `position: relative` es requisito
+   de Chart.js responsive. */
+.chart-box { position: relative; height: 220px; }
+.chart-box--tall { height: 300px; }
 .note { color: var(--muted); font-size: 0.85rem; margin: 0 0 0.9rem; }
 .caution {
   color: var(--warn);
@@ -162,4 +169,16 @@ body {
   border-radius: 8px;
   padding: 0.85rem 1rem;
   margin: 0;
+}
+
+/* Mobile: menos margen para ganar ancho, demografía en 1 columna (la grilla
+   con minmax(260px) desbordaba el card), y gráficos un poco más altos porque
+   el ancho es menor. */
+@media (max-width: 600px) {
+  .container { padding: 0.85rem; }
+  .topbar { padding: 0.85rem 1rem; }
+  .panel { padding: 1rem 0.9rem; }
+  .demo-grid { grid-template-columns: 1fr; gap: 1rem; }
+  .chart-box { height: 240px; }
+  .chart-box--tall { height: 320px; }
 }
