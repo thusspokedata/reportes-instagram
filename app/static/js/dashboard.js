@@ -111,7 +111,13 @@
           labels: labels(demo.gender),
           datasets: [{ data: values(demo.gender), backgroundColor: demoColors }],
         },
-        options: { responsive: true, plugins: { legend: { position: "bottom" } } },
+        // maintainAspectRatio:false: el alto lo fija el .chart-box. El doughnut
+        // se dibuja como círculo centrado del lado menor, así no desborda.
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { position: "bottom" } },
+        },
       });
     }
 
@@ -131,6 +137,7 @@
           },
           options: {
             responsive: true,
+            maintainAspectRatio: false,
             scales: { y: { beginAtZero: true } },
             plugins: { legend: { display: false } },
           },

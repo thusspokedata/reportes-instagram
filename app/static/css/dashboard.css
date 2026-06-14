@@ -78,6 +78,9 @@ body {
    de Chart.js responsive. */
 .chart-box { position: relative; height: 220px; }
 .chart-box--tall { height: 300px; }
+/* Guard: Chart.js fija el tamaño del canvas, pero esto garantiza que nunca
+   exceda su contenedor (evita cualquier desborde horizontal en mobile). */
+.chart-box canvas { max-width: 100%; }
 .note { color: var(--muted); font-size: 0.85rem; margin: 0 0 0.9rem; }
 .caution {
   color: var(--warn);
