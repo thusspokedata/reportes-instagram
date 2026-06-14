@@ -41,7 +41,7 @@ Los cálculos viven en el **backend** (`app/routes/dashboard.py`), no en el JS.
 
 ## Estructura
 
-```
+```text
 app/
   __init__.py      app factory (create_app): valida SECRET_KEY + TOKEN_ENCRYPTION_KEY,
                    registra blueprints y comandos, aplica ProxyFix (nginx).
@@ -86,7 +86,7 @@ pip install -r requirements.txt
 cp .env.example .env        # completar SECRET_KEY y TOKEN_ENCRYPTION_KEY
 flask init-db
 python wsgi.py              # http://localhost:5000  (/health -> {"status":"ok"})
-pytest                      # 182 tests
+pytest                      # corre la suite (debe quedar toda en verde)
 ```
 
 OAuth con Meta exige HTTPS → en dev se usa un túnel ngrok con dev-domain fijo
@@ -96,8 +96,9 @@ OAuth con Meta exige HTTPS → en dev se usa un túnel ngrok con dev-domain fijo
 
 `SECRET_KEY`*, `TOKEN_ENCRYPTION_KEY`* (Fernet), `FACEBOOK_APP_ID/SECRET`,
 `REDIRECT_URI`, `GRAPH_API_VERSION` (ej. `v23.0`), `DATABASE`,
-`SESSION_COOKIE_SECURE`, `ANTHROPIC_API_KEY` (reporte), `REPORT_MODEL`
-(default `claude-haiku-4-5`). (* obligatorias: la app no arranca sin ellas.)
+`SESSION_COOKIE_SECURE`, `FLASK_DEBUG` (default off), `ANTHROPIC_API_KEY`
+(reporte), `REPORT_MODEL` (default `claude-haiku-4-5`).
+(* obligatorias: la app no arranca sin ellas.)
 
 ## Comandos CLI (`flask …`)
 
