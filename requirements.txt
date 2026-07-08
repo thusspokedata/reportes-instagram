@@ -3,4 +3,4 @@ gunicorn>=26.0.0,<27
 python-dotenv>=1.2.2,<2
 cryptography>=49.0.0,<50
 requests>=2.34.2,<3
-anthropic>=0.109.2,<1
+anthropic>=0.116.0,<1
